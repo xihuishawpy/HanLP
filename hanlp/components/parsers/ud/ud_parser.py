@@ -84,8 +84,12 @@ class UniversalDependenciesParser(TorchComponent):
         self.vocabs.summary(logger)
 
     def build_dataset(self, data, transform):
-        dataset = CoNLLParsingDataset(data, transform=transform, prune=sample_form_missing, cache=isinstance(data, str))
-        return dataset
+        return CoNLLParsingDataset(
+            data,
+            transform=transform,
+            prune=sample_form_missing,
+            cache=isinstance(data, str),
+        )
 
     def build_optimizer(self, trn, **kwargs):
         # noinspection PyCallByClass,PyTypeChecker
@@ -309,8 +313,7 @@ class UniversalDependenciesParser(TorchComponent):
 
     def compute_mask(self, batch):
         lens = batch['token_length']
-        mask = lengths_to_mask(lens)
-        return mask
+        return lengths_to_mask(lens)
 
     def _step(self, optimizer, scheduler, grad_norm):
         clip_grad_norm(self.model, grad_norm)

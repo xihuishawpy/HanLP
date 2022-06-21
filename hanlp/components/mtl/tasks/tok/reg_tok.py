@@ -21,8 +21,7 @@ from hanlp.transform.transformer_tokenizer import TransformerSequenceTokenizer
 
 
 def generate_token_span_tuple(sample: dict):
-    prefix_mask = sample.get('text_prefix_mask', None)
-    if prefix_mask:
+    if prefix_mask := sample.get('text_prefix_mask', None):
         sample['span_tuple'] = spans = []
         previous_prefix = 0
         prefix_mask_ = prefix_mask[1:-1]
@@ -95,8 +94,9 @@ class RegressionTokenization(Task):
     def decode_output(self,
                       output: Union[torch.Tensor, Dict[str, torch.Tensor], Iterable[torch.Tensor], Any],
                       batch: Dict[str, Any], **kwargs) -> List[Tuple[int, int]]:
-        spans = BinaryChunkingF1.decode_spans(output > 0, batch['text_input_ids_length'])
-        return spans
+        return BinaryChunkingF1.decode_spans(
+            output > 0, batch['text_input_ids_length']
+        )
 
     def update_metrics(self, batch: Dict[str, Any],
                        output: Union[torch.Tensor, Dict[str, torch.Tensor], Iterable[torch.Tensor], Any],

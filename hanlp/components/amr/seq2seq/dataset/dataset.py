@@ -67,8 +67,7 @@ class AMRPickleDataset(AMRDataset):
 
 
 def dfs_linearize_tokenize(sample: dict, tokenizer: PENMANBartTokenizer, remove_space=False, text_key='snt') -> dict:
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         l, e = tokenizer.linearize(amr)
         sample['graph_tokens'] = e['linearized_graphs']
         sample['graph_token_ids'] = l
@@ -83,8 +82,7 @@ def dfs_linearize_tokenize(sample: dict, tokenizer: PENMANBartTokenizer, remove_
 
 
 def dfs_linearize_levi(sample: dict, tokenizer: PENMANBartTokenizer, remove_space=False) -> dict:
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         l, e = tokenizer.linearize(amr)
         sample['graph_tokens'] = e['linearized_graphs']
         sample['graph_token_ids'] = l
@@ -109,13 +107,12 @@ def dfs_linearize_levi(sample: dict, tokenizer: PENMANBartTokenizer, remove_spac
 
 
 def dfs_linearize_rgcn(sample: dict, tokenizer: PENMANBartTokenizer) -> dict:
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         l, e = tokenizer.linearize(amr)
         sample['graph_tokens'] = e['linearized_graphs']
         sample['graph_token_ids'] = l
         tok = sample['tok']
-        sample['text'] = [tokenizer.cls_token] + [' ' + x for x in tok]
+        sample['text'] = [tokenizer.cls_token] + [f' {x}' for x in tok]
         arc_scores = sample['dep']['scores']['arc_scores']
         rel_scores = sample['dep']['scores']['rel_scores']
         dep_graph = arc_scores[:, :, None] * rel_scores
@@ -125,8 +122,7 @@ def dfs_linearize_rgcn(sample: dict, tokenizer: PENMANBartTokenizer) -> dict:
 
 
 def dfs_linearize_constituency(sample: dict, tokenizer: PENMANBartTokenizer, remove_space=False) -> dict:
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         l, e = tokenizer.linearize(amr)
         sample['graph_tokens'] = e['linearized_graphs']
         sample['graph_token_ids'] = l
@@ -140,9 +136,8 @@ def dfs_linearize_constituency(sample: dict, tokenizer: PENMANBartTokenizer, rem
         tokens = []
         buffer = []
         for c in text:
-            if c == '(' or c == ')':
-                tokens.append(''.join(buffer))
-                tokens.append(c)
+            if c in ['(', ')']:
+                tokens.extend((''.join(buffer), c))
                 buffer.clear()
                 continue
             buffer.append(c)
@@ -171,8 +166,7 @@ def dfs_linearize_constituency(sample: dict, tokenizer: PENMANBartTokenizer, rem
 def dfs_linearize_tokenize_with_linguistic_structures(sample: dict, tokenizer: PENMANBartTokenizer,
                                                       remove_space=False,
                                                       text_key='snt') -> dict:
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         l, e = tokenizer.linearize(amr)
         sample['graph_tokens'] = e['linearized_graphs']
         sample['graph_token_ids'] = l
@@ -183,8 +177,7 @@ def dfs_linearize_tokenize_with_linguistic_structures(sample: dict, tokenizer: P
         tok = json.loads(amr.metadata['tok'])
         text_token_ids = tokenizer.batch_encode_plus(tok, add_special_tokens=False).input_ids
         sample['text_token_ids'] = [tokenizer.bos_token_id] + sum(text_token_ids, []) + [tokenizer.eos_token_id]
-        pos = amr.metadata.get('pos', None)
-        if pos:
+        if pos := amr.metadata.get('pos', None):
             flat_pos = []
             pos = json.loads(pos)
             for subtokens, tag in zip(text_token_ids, pos):
@@ -200,8 +193,7 @@ def dfs_linearize_tokenize_with_linguistic_structures(sample: dict, tokenizer: P
             for subtokens, tag in zip(text_token_ids, ner):
                 flat_ner.extend([tag] * len(subtokens))
             sample['ner'] = [BOS] + flat_ner + [EOS]
-        dep = amr.metadata.get('dep', None)
-        if dep:
+        if dep := amr.metadata.get('dep', None):
             token_to_1st_subtoken = [0]
             num_subtokens = 1  # 1 for BOS
             for subtokens in text_token_ids:
@@ -227,8 +219,7 @@ def dep_to_levi(tok: List[str], dep: List[Tuple[int, str]]):
 def dfs(tok: List[str], dep: List[Tuple[int, str]], s, seq):
     seq.append(dep[s][1])
     seq.append(tok[s])
-    children = [i for i, x in enumerate(dep) if x[0] == s + 1]
-    if children:
+    if children := [i for i, x in enumerate(dep) if x[0] == s + 1]:
         seq.append('(')
         for child in children:
             dfs(tok, dep, child, seq)

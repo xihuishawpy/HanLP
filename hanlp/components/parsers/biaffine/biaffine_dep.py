@@ -74,21 +74,21 @@ class BiaffineDependencyParser(TorchComponent):
             sample = {IDX: idx}
             if use_pos:
                 token, pos = zip(*each)
-                sample.update({'FORM': list(token), pos_key: list(pos)})
+                sample |= {'FORM': list(token), pos_key: list(pos)}
             else:
                 token = each
-                sample.update({'FORM': list(token)})
+                sample['FORM'] = list(token)
             samples.append(sample)
         return samples
 
     def input_is_flat(self, data, use_pos=None):
         if use_pos is None:
             use_pos = 'CPOS' in self.vocabs
-        if use_pos:
-            flat = isinstance(data[0], (list, tuple)) and isinstance(data[0][0], str)
-        else:
-            flat = isinstance(data[0], str)
-        return flat
+        return (
+            isinstance(data[0], (list, tuple)) and isinstance(data[0][0], str)
+            if use_pos
+            else isinstance(data[0], str)
+        )
 
     def before_outputs(self, data):
         predictions, order = [], []
@@ -110,17 +110,12 @@ class BiaffineDependencyParser(TorchComponent):
             for d, (arcs, rels) in zip(data, predictions):
                 sent = CoNLLSentence()
                 for idx, (cell, a, r) in enumerate(zip(d, arcs, rels)):
-                    if use_pos:
-                        token, pos = cell
-                    else:
-                        token, pos = cell, None
+                    token, pos = cell if use_pos else (cell, None)
                     sent.append(CoNLLWord(idx + 1, token, cpos=pos, head=a, deprel=self.vocabs['rel'][r]))
                 outputs.append(sent)
         else:
             for d, (arcs, rels) in zip(data, predictions):
-                sent = []
-                for idx, (a, r) in enumerate(zip(arcs, rels)):
-                    sent.append((a, self.vocabs['rel'][r]))
+                sent = [(a, self.vocabs['rel'][r]) for a, r in zip(arcs, rels)]
                 outputs.append(sent)
 
     def collect_outputs(self, arc_scores, rel_scores, mask, batch, predictions, order, data, use_pos,
@@ -214,11 +209,10 @@ class BiaffineDependencyParser(TorchComponent):
                 best_e, best_metric = epoch, dev_metric
                 self.save_weights(save_dir)
                 report += ' ([red]saved[/red])'
+            elif patience == epochs:
+                report += f' ({epoch - best_e})'
             else:
-                if patience != epochs:
-                    report += f' ({epoch - best_e}/{patience})'
-                else:
-                    report += f' ({epoch - best_e})'
+                report += f' ({epoch - best_e}/{patience})'
             logger.info(report)
             if patience is not None and epoch - best_e >= patience:
                 logger.info(f'LAS has stopped improving for {patience} epochs, early stop.')
@@ -280,8 +274,7 @@ class BiaffineDependencyParser(TorchComponent):
         return optimizer, scheduler, transformer_optimizer, transformer_scheduler
 
     def build_transformer_tokenizer(self):
-        transformer = self.config.transformer
-        if transformer:
+        if transformer := self.config.transformer:
             transformer_tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(transformer, use_fast=True)
         else:
             transformer_tokenizer = None
@@ -302,8 +295,7 @@ class BiaffineDependencyParser(TorchComponent):
         dataset = self.build_dataset(data)
         if self.vocabs.mutable:
             self.build_vocabs(dataset, logger, self.config.transformer)
-        transformer_tokenizer = self.transformer_tokenizer
-        if transformer_tokenizer:
+        if transformer_tokenizer := self.transformer_tokenizer:
             dataset.transform.append(self.build_tokenizer_transform())
         dataset.append_transform(FieldLength('token', 'sent_length'))
         if isinstance(data, str):
@@ -319,13 +311,14 @@ class BiaffineDependencyParser(TorchComponent):
             sampler = sampler_builder.build(lens, shuffle, gradient_accumulation)
         else:
             sampler = None
-        loader = PadSequenceDataLoader(dataset=dataset,
-                                       batch_sampler=sampler,
-                                       batch_size=batch_size,
-                                       pad=self.get_pad_dict(),
-                                       device=device,
-                                       vocabs=self.vocabs)
-        return loader
+        return PadSequenceDataLoader(
+            dataset=dataset,
+            batch_sampler=sampler,
+            batch_size=batch_size,
+            pad=self.get_pad_dict(),
+            device=device,
+            vocabs=self.vocabs,
+        )
 
     def cache_dataset(self, dataset, timer, training=False, logger=None):
         for each in dataset:
@@ -385,7 +378,7 @@ class BiaffineDependencyParser(TorchComponent):
             for word in freq_words:
                 token_vocab(word)
         else:
-            for i, sample in enumerate(dataset):
+            for sample in dataset:
                 timer.log('vocab building [blink][yellow]...[/yellow][/blink]', ratio_percentage=True)
         rel_vocab.set_unk_as_safe_unk()  # Some relation in dev set is OOV
         self.vocabs.lock()
@@ -404,8 +397,7 @@ class BiaffineDependencyParser(TorchComponent):
         pretrained_embed, transformer = self.build_embeddings(training=training)
         if pretrained_embed is not None:
             self.config.n_embed = pretrained_embed.size(-1)
-        model = self.create_model(pretrained_embed, transformer)
-        return model
+        return self.create_model(pretrained_embed, transformer)
 
     def create_model(self, pretrained_embed, transformer):
         return BiaffineDependencyModel(self.config,
@@ -441,7 +433,7 @@ class BiaffineDependencyParser(TorchComponent):
         timer = CountdownTimer(history.num_training_steps(len(trn), gradient_accumulation))
         metric = self.build_metric(training=True)
         total_loss = 0
-        for idx, batch in enumerate(trn):
+        for batch in trn:
             arc_scores, rel_scores, mask, puncts = self.feed_batch(batch)
             arcs, rels = batch['arc'], batch['rel_id']
             loss = self.compute_loss(arc_scores, rel_scores, arcs, rels, mask, criterion, batch)
@@ -490,9 +482,7 @@ class BiaffineDependencyParser(TorchComponent):
         rel_scores = rel_scores[torch.arange(len(arcs)), arcs]
         arc_loss = criterion(arc_scores, arcs)
         rel_loss = criterion(rel_scores, rels)
-        loss = arc_loss + rel_loss
-
-        return loss
+        return arc_loss + rel_loss
 
     # noinspection PyUnboundLocalVariable
     @torch.no_grad()
@@ -522,7 +512,7 @@ class BiaffineDependencyParser(TorchComponent):
             self.update_metric(arc_preds, rel_preds, arcs, rels, mask, puncts, metric, batch)
             report = self._report(loss / (timer.current + 1), metric)
             if filename:
-                report = f'{os.path.basename(filename)} ' + report
+                report = f'{os.path.basename(filename)} {report}'
             timer.log(report, ratio_percentage=False, logger=logger, ratio_width=ratio_width)
         loss /= len(loader)
         if output:
@@ -552,8 +542,7 @@ class BiaffineDependencyParser(TorchComponent):
         return arc_preds, rel_preds
 
     def build_criterion(self, **kwargs):
-        criterion = nn.CrossEntropyLoss()
-        return criterion
+        return nn.CrossEntropyLoss()
 
     def build_metric(self, **kwargs):
         return AttachmentScore()
@@ -571,5 +560,9 @@ class BiaffineDependencyParser(TorchComponent):
         for arcs_per_sent, rels_per_sent, tokens in zip(arcs, rels, batch['token']):
             tokens = tokens[1:]
             sent_len = len(tokens)
-            result = list(zip(arcs_per_sent[:sent_len], [vocab[r] for r in rels_per_sent[:sent_len]]))
-            yield result
+            yield list(
+                zip(
+                    arcs_per_sent[:sent_len],
+                    [vocab[r] for r in rels_per_sent[:sent_len]],
+                )
+            )

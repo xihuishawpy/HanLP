@@ -37,9 +37,7 @@ class NgramConvTokenizerTransform(TxtFormat, NgramTransform):
             yield extract_ngram_features_and_tags(sent, False, self.config.window_size, gold)
 
     def input_is_single_sample(self, input: Union[List[str], List[List[str]]]) -> bool:
-        if not input:
-            return True
-        return isinstance(input, str)
+        return isinstance(input, str) if input else True
 
     def Y_to_outputs(self, Y: Union[tf.Tensor, Tuple[tf.Tensor]], gold=False, inputs=None, X=None,
                      **kwargs) -> Iterable:

@@ -72,9 +72,7 @@ class TagDecoder(torch.nn.Module):
 
         loss_fn = self._adaptive_loss if self.adaptive else self._loss
 
-        output_dict = loss_fn(hidden, mask, gold_tags, output_dim)
-
-        return output_dict
+        return loss_fn(hidden, mask, gold_tags, output_dim)
 
     def _adaptive_loss(self, hidden, mask, gold_tags, output_dim):
         logits = hidden

@@ -7,11 +7,11 @@ import os
 from hanlp.utils.io_util import uncompress, get_resource
 
 _UD_210_URL = "https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-4758/allzip"
-_UD_210_HOME = _UD_210_URL + '#ud-treebanks-v2.10/'
+_UD_210_HOME = f'{_UD_210_URL}#ud-treebanks-v2.10/'
 _path = get_resource(_UD_210_URL)
 if os.path.isfile(_path):
-    os.rename(_path, _path + '.zip')
-    uncompress(_path + '.zip')
+    os.rename(_path, f'{_path}.zip')
+    uncompress(f'{_path}.zip')
     uncompress(os.path.join(_path, 'ud-treebanks-v2.10.tgz'))
 
 
@@ -21,12 +21,12 @@ def _list_dir(path, home):
 
     path = get_resource(path)
     with open('ud210.py', 'a') as out:
-        for f in sorted(glob.glob(path + '/ud-treebanks-v2.10/UD_*')):
+        for f in sorted(glob.glob(f'{path}/ud-treebanks-v2.10/UD_*')):
             basename = os.path.basename(f)
             name = basename[len('UD_'):]
             name = name.upper().replace('-', '_')
             for split in 'train', 'dev', 'test':
-                sp = glob.glob(f + f'/*{split}.conllu')
+                sp = glob.glob(f'{f}/*{split}.conllu')
                 if not sp:
                     continue
                 sp = os.path.basename(sp[0])
@@ -36,7 +36,6 @@ def _list_dir(path, home):
 
 def main():
     _list_dir(_UD_210_URL, '_UD_210_HOME')
-    pass
 
 
 if __name__ == '__main__':

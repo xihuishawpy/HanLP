@@ -35,8 +35,7 @@ class SemanticGraph:
     @property
     def variables(self) -> Set[str]:
         """Set of variables in this semantic graph"""
-        variables = {v for v in self.nodes_var if not v.startswith('<')}
-        return variables
+        return {v for v in self.nodes_var if not v.startswith('<')}
 
     @property
     def resolved_nodes_var(self) -> List[str]:
@@ -142,10 +141,11 @@ class AMRLinearizer(BaseLinearizer):
 
     def _collapse_name_ops(self, amr):
         # identify name triples
-        name_vars = {}
-        for i, (v1, rel, v2) in enumerate(amr.triples):
-            if rel == ':instance' and v2 == 'name':
-                name_vars[v1] = 1
+        name_vars = {
+            v1: 1
+            for v1, rel, v2 in amr.triples
+            if rel == ':instance' and v2 == 'name'
+        }
 
         # check if they have ops
         name_vars_to_ops = defaultdict(list)
@@ -178,7 +178,7 @@ class AMRLinearizer(BaseLinearizer):
 
     def _linearize(self, amr: penman.Graph) -> SemanticGraph:
         variables = set(amr.variables())
-        variables = {'var:' + v for v in variables}
+        variables = {f'var:{v}' for v in variables}
         var2instance = {}
 
         graph = nx.MultiDiGraph()
@@ -190,13 +190,18 @@ class AMRLinearizer(BaseLinearizer):
             order = triples2order[triple]
             if rel != ':instance':
                 continue
-            for expansion_candidate in itertools.chain(range(order - 1, -1), range(order + 1, len(amr.triples))):
-                if var == amr.triples[expansion_candidate][2]:
-                    expansion = expansion_candidate
-                    break
-            else:
-                expansion = 0
-            var = 'var:' + var
+            expansion = next(
+                (
+                    expansion_candidate
+                    for expansion_candidate in itertools.chain(
+                        range(order - 1, -1), range(order + 1, len(amr.triples))
+                    )
+                    if var == amr.triples[expansion_candidate][2]
+                ),
+                0,
+            )
+
+            var = f'var:{var}'
             var2instance[var] = instance
             graph.add_node(var, instance=instance, order=order, expansion=expansion)
 
@@ -205,8 +210,8 @@ class AMRLinearizer(BaseLinearizer):
             order = triples2order[triple]
             if rel == ':instance':
                 continue
-            var1 = 'var:' + var1
-            var2 = 'var:' + var2
+            var1 = f'var:{var1}'
+            var2 = f'var:{var2}'
             graph.add_edge(var1, var2, rel=rel, order=order)
 
         for triple in amr.attributes():
@@ -214,7 +219,7 @@ class AMRLinearizer(BaseLinearizer):
             order = triples2order[triple]
             if rel == ':instance':
                 continue
-            var = 'var:' + var
+            var = f'var:{var}'
             graph.add_edge(var, attr, rel=rel, order=order)
 
         # nodes that are not reachable from the root (e.g. because of reification)
@@ -234,7 +239,7 @@ class AMRLinearizer(BaseLinearizer):
         edges_visit = [AMRTokens.BOS_E]
         backreferences = [0]
         queue = deque()
-        queue.append('var:' + amr.top)
+        queue.append(f'var:{amr.top}')
 
         while queue or not_explored:
 
@@ -299,12 +304,10 @@ class AMRLinearizer(BaseLinearizer):
                 backreferences.append(len(nodes_visit))
                 nodes_visit.append(AMRTokens.STOP_N)
                 edges_visit.append(AMRTokens.STOP_E)
-                explored.add(node1)
-
             else:
                 backreferences.append(len(nodes_visit))
                 nodes_visit.append(node1)
-                explored.add(node1)
+            explored.add(node1)
 
         backreferences.append(len(nodes_visit))
         nodes_visit.append(AMRTokens.EOS_N)
@@ -390,19 +393,17 @@ class AMRLinearizer(BaseLinearizer):
                 new_nodes.append(pointer)
             elif node in graph.var2instance:
                 pointer = var2pointer.setdefault(node, f"<pointer:{len(var2pointer)}>")
-                new_nodes.append(pointer)
-                new_nodes.append(node)
+                new_nodes.extend((pointer, node))
             else:
                 new_nodes.append(node)
 
         new_backreferences = list(range(len(new_nodes)))
-        new_graph = SemanticGraph(
+        return SemanticGraph(
             new_nodes,
             None,
             new_backreferences,
             graph.var2instance,
             extra=graph.extra,
         )
-        return new_graph
 
 

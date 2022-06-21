@@ -56,9 +56,8 @@ class Transformable(ABC):
         elif not isinstance(self.transform, TransformList):
             if self.transform != transform:
                 self.transform = TransformList(self.transform, transform)
-        else:
-            if transform not in self.transform:
-                self.transform.append(transform)
+        elif transform not in self.transform:
+            self.transform.append(transform)
         return self
 
     def insert_transform(self, index: int, transform: Callable):
@@ -79,9 +78,8 @@ class Transformable(ABC):
             if self.transform != transform:
                 self.transform = TransformList(self.transform)
                 self.transform.insert(index, transform)
-        else:
-            if transform not in self.transform:
-                self.transform.insert(index, transform)
+        elif transform not in self.transform:
+            self.transform.insert(index, transform)
         return self
 
     def transform_sample(self, sample: dict, inplace=False) -> dict:
@@ -130,10 +128,7 @@ class TransformableDataset(Transformable, Dataset, ABC):
         assert isinstance(data_[0],
                           dict), f'TransformDataset expects each sample to be a dict but got {type(data_[0])} instead.'
         self.data = data_
-        if cache:
-            self.cache = [None] * len(data_)
-        else:
-            self.cache = None
+        self.cache = [None] * len(data_) if cache else None
 
     def load_data(self, data, generate_idx=False):
         """A intermediate step between constructor and calling the actual file loading method.
@@ -199,8 +194,7 @@ class TransformableDataset(Transformable, Dataset, ABC):
             return [self[i] for i in indices]
 
         if self.cache:
-            cache = self.cache[index]
-            if cache:
+            if cache := self.cache[index]:
                 return cache
         sample = self.data[index]
         sample = self.transform_sample(sample)
@@ -323,10 +317,7 @@ class DeviceDataLoader(DataLoader):
         if batch_sampler is not None:
             batch_size = 1
         if num_workers is None:
-            if isdebugging():
-                num_workers = 0
-            else:
-                num_workers = 2
+            num_workers = 0 if isdebugging() else 2
         # noinspection PyArgumentList
         super(DeviceDataLoader, self).__init__(dataset=dataset, batch_size=batch_size, shuffle=shuffle,
                                                sampler=sampler,
@@ -393,10 +384,7 @@ class PadSequenceDataLoader(DataLoader):
         if collate_fn is None:
             collate_fn = self.collate_fn
         if num_workers is None:
-            if isdebugging():
-                num_workers = 0
-            else:
-                num_workers = 2
+            num_workers = 0 if isdebugging() else 2
         if batch_sampler is None:
             assert batch_size, 'batch_size has to be specified when batch_sampler is None'
         else:
@@ -484,9 +472,8 @@ class PadSequenceDataLoader(DataLoader):
                 if len(each):
                     if isinstance(each[0], Iterable):
                         inner_is_iterable = True
-                        if len(each[0]):
-                            if not dtype:
-                                dtype = dtype_of(each[0][0])
+                        if len(each[0]) and not dtype:
+                            dtype = dtype_of(each[0][0])
                     else:
                         inner_is_iterable = False
                         if not dtype:
@@ -494,7 +481,7 @@ class PadSequenceDataLoader(DataLoader):
                     break
             if inner_is_iterable:
                 max_seq_len = len(max(data, key=len))
-                max_word_len = len(max([chars for words in data for chars in words], key=len))
+                max_word_len = len(max((chars for words in data for chars in words), key=len))
                 ids = torch.zeros(len(data), max_seq_len, max_word_len, dtype=dtype, device=device)
                 for i, words in enumerate(data):
                     for j, chars in enumerate(words):
@@ -521,7 +508,7 @@ class CachedDataLoader(object):
     def _build_cache(self, dataset, verbose=HANLP_VERBOSE):
         timer = CountdownTimer(self.size)
         with open(self.filename, "wb") as f:
-            for i, batch in enumerate(dataset):
+            for batch in dataset:
                 torch.save(batch, f, _use_new_zipfile_serialization=False)
                 if verbose:
                     timer.log(f'Caching {self.filename} [blink][yellow]...[/yellow][/blink]')
@@ -532,9 +519,8 @@ class CachedDataLoader(object):
 
     def __iter__(self):
         with open(self.filename, "rb") as f:
-            for i in range(self.size):
-                batch = torch.load(f)
-                yield batch
+            for _ in range(self.size):
+                yield torch.load(f)
 
     def __len__(self):
         return self.size
@@ -593,8 +579,7 @@ class PrefetchDataLoader(DataLoader):
         else:
             size = len(self)
             while size:
-                batch = self.queue.get()
-                yield batch
+                yield self.queue.get()
                 size -= 1
 
     def close(self):
@@ -631,9 +616,7 @@ class BucketSampler(Sampler):
             shuffle: ``True`` to shuffle batches and samples in a batch.
         """
         self.shuffle = shuffle
-        self.sizes, self.buckets = zip(*[
-            (size, bucket) for size, bucket in buckets.items()
-        ])
+        self.sizes, self.buckets = zip(*list(buckets.items()))
         # the number of chunks in each bucket, which is clipped by
         # range [1, len(bucket)]
         if batch_size:
@@ -710,16 +693,15 @@ class SortingSampler(Sampler):
                     batch_size is None or len(mini_batch) < batch_size):
                 mini_batch.append(i)
                 num_tokens += effective_tokens
-            else:
-                if not mini_batch:  # this sequence is longer than  batch_max_tokens
-                    mini_batch.append(i)
-                    self.batch_indices.append(mini_batch)
-                    mini_batch = []
-                    num_tokens = 0
-                else:
-                    self.batch_indices.append(mini_batch)
-                    mini_batch = [i]
-                    num_tokens = effective_tokens
+            elif mini_batch:
+                self.batch_indices.append(mini_batch)
+                mini_batch = [i]
+                num_tokens = effective_tokens
+            else:  # this sequence is longer than  batch_max_tokens
+                mini_batch.append(i)
+                self.batch_indices.append(mini_batch)
+                mini_batch = []
+                num_tokens = 0
         if mini_batch:
             self.batch_indices.append(mini_batch)
         # print(len(max(self.batch_indices, key=len)))
@@ -727,8 +709,7 @@ class SortingSampler(Sampler):
     def __iter__(self):
         if self.shuffle:
             random.shuffle(self.batch_indices)
-        for batch in self.batch_indices:
-            yield batch
+        yield from self.batch_indices
 
     def __len__(self) -> int:
         return len(self.batch_indices)
@@ -829,11 +810,12 @@ class TableDataset(TransformableDataset):
 
     def load_file(self, filepath: str):
         for idx, cells in enumerate(read_cells(filepath, strip=self.strip, delimiter=self.delimiter)):
-            if not idx and not self.headers:
+            if idx or self.headers:
+                yield dict(zip(self.headers, cells))
+
+            else:
                 self.headers = cells
                 if any(len(h) > 32 for h in self.headers):
                     warnings.warn('As you did not pass in `headers` to `TableDataset`, the first line is regarded as '
                                   'headers. However, the length for some headers are too long (>32), which might be '
                                   'wrong. To make sure, pass `headers=...` explicitly.')
-            else:
-                yield dict(zip(self.headers, cells))

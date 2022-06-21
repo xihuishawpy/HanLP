@@ -57,7 +57,7 @@ class MultiTaskDataLoader(DataLoader):
         super().__init__(None)
         self.tau = tau
         self.training = training
-        self.dataloaders: Dict[str, DataLoader] = dataloaders if dataloaders else {}
+        self.dataloaders: Dict[str, DataLoader] = dataloaders or {}
         # self.iterators = dict((k, iter(v)) for k, v in dataloaders.items())
 
     def __len__(self) -> int:
@@ -69,8 +69,8 @@ class MultiTaskDataLoader(DataLoader):
         if self.training:
             sampling_weights, total_size = self.sampling_weights
             task_names = list(self.dataloaders.keys())
-            iterators = dict((k, itertools.cycle(v)) for k, v in self.dataloaders.items())
-            for i in range(total_size):
+            iterators = {k: itertools.cycle(v) for k, v in self.dataloaders.items()}
+            for _ in range(total_size):
                 task_name = np.random.choice(task_names, p=sampling_weights)
                 yield task_name, next(iterators[task_name])
         else:
@@ -131,15 +131,12 @@ class MultiTaskLearning(TorchComponent):
         for i, (task_name, task) in enumerate(self.tasks.items()):
             encoder_transform, transform = self.build_transform(task)
             training = None
-            if data == 'trn':
-                if debug:
-                    _data = task.dev
-                else:
-                    _data = task.trn
-                training = True
-            elif data == 'dev':
+            if data == 'dev':
                 _data = task.dev
                 training = False
+            elif data == 'trn':
+                _data = task.dev if debug else task.trn
+                training = True
             elif data == 'tst':
                 _data = task.tst
                 training = False
@@ -201,8 +198,7 @@ class MultiTaskLearning(TorchComponent):
         encoder_transform: TransformerSequenceTokenizer = task.build_tokenizer(encoder.transform())
         length_transform = FieldLength('token', 'token_length')
         transform = TransformList(encoder_transform, length_transform)
-        extra_transform = self.config.get('transform', None)
-        if extra_transform:
+        if extra_transform := self.config.get('transform', None):
             transform.insert(0, extra_transform)
         return encoder_transform, transform
 
@@ -222,7 +218,7 @@ class MultiTaskLearning(TorchComponent):
         parameter_groups: List[Dict[str, Any]] = []
 
         decoders = model.decoders
-        decoder_optimizers = dict()
+        decoder_optimizers = {}
         for k, task in self.tasks.items():
             decoder: torch.nn.Module = decoders[k]
             decoder_parameters = list(decoder.parameters())
@@ -233,10 +229,12 @@ class MultiTaskLearning(TorchComponent):
                 parameter_groups.append({"params": decoder_parameters, 'lr': task_lr})
         parameter_groups.append({"params": encoder_parameters, 'lr': encoder_lr})
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-        no_decay_parameters = set()
-        for n, p in model.named_parameters():
-            if any(nd in n for nd in no_decay):
-                no_decay_parameters.add(p)
+        no_decay_parameters = {
+            p
+            for n, p in model.named_parameters()
+            if any(nd in n for nd in no_decay)
+        }
+
         no_decay_by_lr = defaultdict(list)
         for group in parameter_groups:
             _lr = group['lr']
@@ -248,8 +246,11 @@ class MultiTaskLearning(TorchComponent):
                     no_decay_by_lr[_lr].append(p)
                 else:
                     decay_parameters.append(p)
-        for _lr, ps in no_decay_by_lr.items():
-            parameter_groups.append({"params": ps, 'lr': _lr, 'weight_decay': 0.0})
+        parameter_groups.extend(
+            {"params": ps, 'lr': _lr, 'weight_decay': 0.0}
+            for _lr, ps in no_decay_by_lr.items()
+        )
+
         # noinspection PyTypeChecker
         encoder_optimizer = optimization.AdamW(
             parameter_groups,
@@ -263,7 +264,10 @@ class MultiTaskLearning(TorchComponent):
         return encoder_optimizer, encoder_scheduler, decoder_optimizers
 
     def build_criterion(self, **kwargs):
-        return dict((k, v.build_criterion(decoder=self.model_.decoders[k], **kwargs)) for k, v in self.tasks.items())
+        return {
+            k: v.build_criterion(decoder=self.model_.decoders[k], **kwargs)
+            for k, v in self.tasks.items()
+        }
 
     def build_metric(self, **kwargs):
         metrics = MetricDict()
@@ -342,7 +346,7 @@ class MultiTaskLearning(TorchComponent):
         model = self.model_
         encoder_parameters = model.encoder.parameters()
         decoder_parameters = model.decoders.parameters()
-        for idx, (task_name, batch) in enumerate(trn):
+        for task_name, batch in trn:
             decoder_optimizer = decoder_optimizers.get(task_name, None)
             output_dict, _ = self.feed_batch(batch, task_name)
             loss = self.compute_loss(batch, output_dict[task_name]['output'], criterion[task_name],
@@ -398,12 +402,12 @@ class MultiTaskLearning(TorchComponent):
         self.reset_metrics(metric)
         tasks_need_custom_eval = self.config.get('tasks_need_custom_eval', None)
         tasks_need_custom_eval = tasks_need_custom_eval or {}
-        tasks_need_custom_eval = dict((k, None) for k in tasks_need_custom_eval)
+        tasks_need_custom_eval = {k: None for k in tasks_need_custom_eval}
         for each in tasks_need_custom_eval:
             tasks_need_custom_eval[each] = data.dataloaders.pop(each)
         timer = CountdownTimer(len(data) + len(tasks_need_custom_eval))
         total_loss = 0
-        for idx, (task_name, batch) in enumerate(data):
+        for task_name, batch in data:
             output_dict, _ = self.feed_batch(batch, task_name)
             loss = self.compute_loss(batch, output_dict[task_name]['output'], criterion[task_name],
                                      self.tasks[task_name])
@@ -442,7 +446,7 @@ class MultiTaskLearning(TorchComponent):
         encoder_size = transformer_module.get_output_dim()
         scalar_mixes = torch.nn.ModuleDict()
         decoders = torch.nn.ModuleDict()
-        use_raw_hidden_states = dict()
+        use_raw_hidden_states = {}
         for task_name, task in tasks.items():
             decoder = task.build_model(encoder_size, training=training, **task.config)
             assert decoder, f'Please implement `build_model` of {type(task)} to return a decoder.'
@@ -480,8 +484,8 @@ class MultiTaskLearning(TorchComponent):
 
         target_tasks = resolved_tasks or self.resolve_tasks(tasks, skip_tasks)
         flatten_target_tasks = [self.tasks[t] for group in target_tasks for t in group]
-        cls_is_bos = any([x.cls_is_bos for x in flatten_target_tasks])
-        sep_is_eos = any([x.sep_is_eos for x in flatten_target_tasks])
+        cls_is_bos = any(x.cls_is_bos for x in flatten_target_tasks)
+        sep_is_eos = any(x.sep_is_eos for x in flatten_target_tasks)
         # Now build the dataloaders and execute tasks
         first_task_name: str = list(target_tasks[0])[0]
         first_task: Task = self.tasks[first_task_name]
@@ -511,41 +515,38 @@ class MultiTaskLearning(TorchComponent):
                         continue
                     output_dict = self.predict_task(self.tasks[task_name], task_name, batch, results, output_dict,
                                                     run_transform=True, cls_is_bos=cls_is_bos, sep_is_eos=sep_is_eos)
-                if group_id == 0:
-                    # We are kind of hard coding here. If the first task is a tokenizer,
-                    # we need to convert the hidden and mask to token level
-                    if first_task_name.startswith('tok'):
-                        spans = []
-                        tokens = []
-                        output_spans = first_task.config.get('output_spans', None)
-                        for span_per_sent, token_per_sent in zip(output_dict[first_task_name]['prediction'],
-                                                                 results[first_task_name][-len(batch[IDX]):]):
-                            if output_spans:
-                                token_per_sent = [x[0] for x in token_per_sent]
-                            if cls_is_bos:
-                                span_per_sent = [(-1, 0)] + span_per_sent
-                                token_per_sent = [BOS] + token_per_sent
-                            if sep_is_eos:
-                                span_per_sent = span_per_sent + [(span_per_sent[-1][0] + 1, span_per_sent[-1][1] + 1)]
-                                token_per_sent = token_per_sent + [EOS]
-                            # The offsets start with 0 while [CLS] is zero
-                            if average_subwords:
-                                span_per_sent = [list(range(x[0] + 1, x[1] + 1)) for x in span_per_sent]
-                            else:
-                                span_per_sent = [x[0] + 1 for x in span_per_sent]
-                            spans.append(span_per_sent)
-                            tokens.append(token_per_sent)
-                        spans = PadSequenceDataLoader.pad_data(spans, 0, torch.long, device=device)
-                        output_dict['hidden'] = pick_tensor_for_each_token(output_dict['hidden'], spans,
-                                                                           average_subwords)
-                        batch['token_token_span'] = spans
-                        batch['token'] = tokens
-                        # noinspection PyTypeChecker
-                        batch['token_length'] = torch.tensor([len(x) for x in tokens], dtype=torch.long, device=device)
-                        batch.pop('mask', None)
+                if group_id == 0 and first_task_name.startswith('tok'):
+                    spans = []
+                    tokens = []
+                    output_spans = first_task.config.get('output_spans', None)
+                    for span_per_sent, token_per_sent in zip(output_dict[first_task_name]['prediction'],
+                                                             results[first_task_name][-len(batch[IDX]):]):
+                        if output_spans:
+                            token_per_sent = [x[0] for x in token_per_sent]
+                        if cls_is_bos:
+                            span_per_sent = [(-1, 0)] + span_per_sent
+                            token_per_sent = [BOS] + token_per_sent
+                        if sep_is_eos:
+                            span_per_sent = span_per_sent + [(span_per_sent[-1][0] + 1, span_per_sent[-1][1] + 1)]
+                            token_per_sent = token_per_sent + [EOS]
+                        # The offsets start with 0 while [CLS] is zero
+                        if average_subwords:
+                            span_per_sent = [list(range(x[0] + 1, x[1] + 1)) for x in span_per_sent]
+                        else:
+                            span_per_sent = [x[0] + 1 for x in span_per_sent]
+                        spans.append(span_per_sent)
+                        tokens.append(token_per_sent)
+                    spans = PadSequenceDataLoader.pad_data(spans, 0, torch.long, device=device)
+                    output_dict['hidden'] = pick_tensor_for_each_token(output_dict['hidden'], spans,
+                                                                       average_subwords)
+                    batch['token_token_span'] = spans
+                    batch['token'] = tokens
+                    # noinspection PyTypeChecker
+                    batch['token_length'] = torch.tensor([len(x) for x in tokens], dtype=torch.long, device=device)
+                    batch.pop('mask', None)
         # Put results into doc in the order of tasks
         for k in self.config.task_names:
-            v = results.get(k, None)
+            v = results.get(k)
             if v is None:
                 continue
             doc[k] = reorder(v, order)
@@ -646,8 +647,13 @@ class MultiTaskLearning(TorchComponent):
 
     # noinspection PyAttributeOutsideInit
     def on_config_ready(self, **kwargs):
-        self.tasks = dict((key, task) for key, task in self.config.items() if isinstance(task, Task))
-        computation_graph = dict()
+        self.tasks = {
+            key: task
+            for key, task in self.config.items()
+            if isinstance(task, Task)
+        }
+
+        computation_graph = {}
         for task_name, task in self.tasks.items():
             dependencies = task.dependencies
             resolved_dependencies = self._resolve_task_name(dependencies)
@@ -655,7 +661,7 @@ class MultiTaskLearning(TorchComponent):
 
         # We can cache this order
         tasks_in_topological_order = list(toposort(computation_graph))
-        task_topological_order = dict()
+        task_topological_order = {}
         for i, group in enumerate(tasks_in_topological_order):
             for task_name in group:
                 task_topological_order[task_name] = i
@@ -736,8 +742,7 @@ class MultiTaskLearning(TorchComponent):
 
     def update_metrics(self, batch: Dict[str, Any], output_dict: Dict[str, Any], metrics: MetricDict, task_name):
         task = self.tasks[task_name]
-        output_per_task = output_dict.get(task_name, None)
-        if output_per_task:
+        if output_per_task := output_dict.get(task_name, None):
             output = output_per_task['output']
             prediction = output_per_task['prediction']
             metric = metrics.get(task_name, None)

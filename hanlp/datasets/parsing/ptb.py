@@ -4,23 +4,23 @@
 
 _PTB_HOME = 'https://github.com/KhalilMrini/LAL-Parser/archive/master.zip#data/'
 
-PTB_TRAIN = _PTB_HOME + '02-21.10way.clean'
+PTB_TRAIN = f'{_PTB_HOME}02-21.10way.clean'
 '''Training set of PTB without empty categories. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
-PTB_DEV = _PTB_HOME + '22.auto.clean'
+PTB_DEV = f'{_PTB_HOME}22.auto.clean'
 '''Dev set of PTB without empty categories. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
-PTB_TEST = _PTB_HOME + '23.auto.clean'
+PTB_TEST = f'{_PTB_HOME}23.auto.clean'
 '''Test set of PTB without empty categories. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
 
-PTB_SD330_TRAIN = _PTB_HOME + 'ptb_train_3.3.0.sd.clean'
+PTB_SD330_TRAIN = f'{_PTB_HOME}ptb_train_3.3.0.sd.clean'
 '''Training set of PTB in Stanford Dependencies 3.3.0 format. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
-PTB_SD330_DEV = _PTB_HOME + 'ptb_dev_3.3.0.sd.clean'
+PTB_SD330_DEV = f'{_PTB_HOME}ptb_dev_3.3.0.sd.clean'
 '''Dev set of PTB in Stanford Dependencies 3.3.0 format. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
-PTB_SD330_TEST = _PTB_HOME + 'ptb_test_3.3.0.sd.clean'
+PTB_SD330_TEST = f'{_PTB_HOME}ptb_test_3.3.0.sd.clean'
 '''Test set of PTB in Stanford Dependencies 3.3.0 format. PoS tags are automatically predicted using 10-fold 
 jackknifing (:cite:`collins-koo-2005-discriminative`).'''
 

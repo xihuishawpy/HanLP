@@ -6,7 +6,7 @@ from hanlp.utils.span_util import allowed_transitions
 
 
 def guess_tagging_scheme(labels: List[str]) -> str:
-    tagset = set(y.split('-')[0] for y in labels)
+    tagset = {y.split('-')[0] for y in labels}
     for scheme in "BIO", "BIOUL", "BMES", 'IOBES':
         if tagset == set(list(scheme)):
             return scheme

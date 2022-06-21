@@ -45,9 +45,7 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
                         warmup_steps,
                         transformer_lr,
                         **kwargs):
-        # noinspection PyProtectedMember
-        transformer = self._get_transformer()
-        if transformer:
+        if transformer := self._get_transformer():
             num_training_steps = len(trn) * epochs // self.config.get('gradient_accumulation', 1)
             optimizer, scheduler = build_optimizer_scheduler_with_transformer(self.model,
                                                                               transformer,
@@ -188,25 +186,37 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
             scores = compute_srl_f1(sentences, gold, pred)
             if logger:
                 if confusion_matrix:
-                    labels = sorted(set(y for x in scores.label_confusions.keys() for y in x))
+                    labels = sorted({y for x in scores.label_confusions.keys() for y in x})
                     headings = ['GOLD↓PRED→'] + labels
                     matrix = []
-                    for i, gold in enumerate(labels):
+                    for gold in labels:
                         row = [gold]
                         matrix.append(row)
-                        for j, pred in enumerate(labels):
-                            row.append(scores.label_confusions.get((gold, pred), 0))
+                        row.extend(scores.label_confusions.get((gold, pred), 0) for pred in labels)
                     matrix = markdown_table(headings, matrix)
                     logger.info(f'{"Confusion Matrix": ^{len(matrix.splitlines()[0])}}')
                     logger.info(matrix)
                 headings = ['Settings', 'Precision', 'Recall', 'F1']
-                data = []
-                for h, (p, r, f) in zip(['Unlabeled', 'Labeled', 'Official'], [
-                    [scores.unlabeled_precision, scores.unlabeled_recall, scores.unlabeled_f1],
-                    [scores.precision, scores.recall, scores.f1],
-                    [scores.conll_precision, scores.conll_recall, scores.conll_f1],
-                ]):
-                    data.append([h] + [f'{x:.2%}' for x in [p, r, f]])
+                data = [
+                    [h] + [f'{x:.2%}' for x in [p, r, f]]
+                    for h, (p, r, f) in zip(
+                        ['Unlabeled', 'Labeled', 'Official'],
+                        [
+                            [
+                                scores.unlabeled_precision,
+                                scores.unlabeled_recall,
+                                scores.unlabeled_f1,
+                            ],
+                            [scores.precision, scores.recall, scores.f1],
+                            [
+                                scores.conll_precision,
+                                scores.conll_recall,
+                                scores.conll_f1,
+                            ],
+                        ],
+                    )
+                ]
+
                 table = markdown_table(headings, data)
                 logger.info(f'{"Scores": ^{len(table.splitlines()[0])}}')
                 logger.info(table)
@@ -217,13 +227,12 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
     def build_model(self,
                     training=True,
                     **kwargs) -> torch.nn.Module:
-        # noinspection PyTypeChecker
-        # embed: torch.nn.Embedding = self.config.embed.module(vocabs=self.vocabs)[0].embed
-        model = SpanRankingSRLModel(self.config,
-                                    self.config.embed.module(vocabs=self.vocabs, training=training),
-                                    self.config.context_layer,
-                                    len(self.vocabs.srl_label))
-        return model
+        return SpanRankingSRLModel(
+            self.config,
+            self.config.embed.module(vocabs=self.vocabs, training=training),
+            self.config.context_layer,
+            len(self.vocabs.srl_label),
+        )
 
     # noinspection PyMethodOverriding
     def build_dataloader(self, data, batch_size, shuffle, device, logger: logging.Logger,
@@ -250,8 +259,7 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
         if transform:
             dataset.append_transform(transform)
         if isinstance(self.config.get('embed', None), Embedding):
-            transform = self.config.embed.transform(vocabs=self.vocabs)
-            if transform:
+            if transform := self.config.embed.transform(vocabs=self.vocabs):
                 dataset.append_transform(transform)
         dataset.append_transform(self.vocabs)
         dataset.append_transform(FieldLength('token'))
@@ -269,8 +277,7 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
             data = [data]
         samples = []
         for token in data:
-            sample = dict()
-            sample['token'] = token
+            sample = {'token': token}
             samples.append(sample)
         batch_size = batch_size or self.config.batch_size
         dataloader = self.build_dataloader(samples, batch_size, False, self.device, None, generate_idx=True)
@@ -361,7 +368,6 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
         for each in dataset:
             max_seq_len = max(max_seq_len, len(each['token_input_ids']))
             timer.log(f'Building vocabs (max sequence length {max_seq_len}) [blink][yellow]...[/yellow][/blink]')
-            pass
         timer.stop()
         timer.erase()
         self.vocabs['srl_label'].set_unk_as_safe_unk()
@@ -398,7 +404,7 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
                 for p, (al, predicate_index) in enumerate(zip(pal, predicate_indices)):
                     for a, (l, argument_span) in enumerate(zip(al, argument_spans)):
                         if l and srl_mask[n][p][a]:
-                            args = srl_per_sentence.get(p, None)
+                            args = srl_per_sentence.get(p)
                             if args is None:
                                 args = srl_per_sentence[p] = []
                             args.append((*argument_span, idx_to_label[l]))
@@ -409,7 +415,7 @@ class SpanRankingSemanticRoleLabeler(TorchComponent):
 
     def update_metrics(self, batch: dict, output_dict: dict, metrics):
         def unpack(y: dict):
-            return set((p, bel) for p, a in y.items() for bel in a)
+            return {(p, bel) for p, a in y.items() for bel in a}
 
         predicate, end_to_end = metrics
         for pred, gold in zip(output_dict['prediction'], batch['srl']):

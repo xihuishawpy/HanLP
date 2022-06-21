@@ -45,8 +45,7 @@ class TransformerClassificationModel(nn.Module):
         else:
             sequence_output = self.transformer(input_ids, attention_mask, token_type_ids)[0][:, 0, :]
         sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-        return logits
+        return self.classifier(sequence_output)
 
 
 class TransformerComponent(TorchComponent, ABC):
@@ -120,8 +119,7 @@ class TransformerComponent(TorchComponent, ABC):
                                          self.config.scalar_mix, self.config.word_dropout,
                                          ret_raw_hidden_states=self.config.ret_raw_hidden_states,
                                          training=training)
-        transformer_layers = self.config.get('transformer_layers', None)
-        if transformer_layers:
+        if transformer_layers := self.config.get('transformer_layers', None):
             transformer.transformer.encoder.layer = transformer.transformer.encoder.layer[:transformer_layers]
         return transformer
 
@@ -138,8 +136,7 @@ class TransformerClassifier(TransformerComponent):
         self.model: TransformerClassificationModel = None
 
     def build_criterion(self, **kwargs):
-        criterion = nn.CrossEntropyLoss()
-        return criterion
+        return nn.CrossEntropyLoss()
 
     def build_metric(self, **kwargs):
         return CategoricalAccuracy()
@@ -191,16 +188,18 @@ class TransformerClassifier(TransformerComponent):
     def update_metric(self, metric, logits: torch.Tensor, target, output=None):
         metric(logits, target)
         if output:
-            label_ids = logits.argmax(-1)
-            return label_ids
+            return logits.argmax(-1)
 
     def compute_loss(self, criterion, logits, target, batch):
-        loss = criterion(logits, target)
-        return loss
+        return criterion(logits, target)
 
     def feed_batch(self, batch) -> torch.LongTensor:
-        logits = self.model(*[batch[key] for key in ['input_ids', 'attention_mask', 'token_type_ids']])
-        return logits
+        return self.model(
+            *[
+                batch[key]
+                for key in ['input_ids', 'attention_mask', 'token_type_ids']
+            ]
+        )
 
     # noinspection PyMethodOverriding
     def evaluate_dataloader(self,
@@ -251,9 +250,8 @@ class TransformerClassifier(TransformerComponent):
         # config.num_labels = len(self.vocabs.label)
         # config.hidden_dropout_prob = self.config.hidden_dropout_prob
         transformer = self.build_transformer(training=training).transformer
-        model = TransformerClassificationModel(transformer, len(self.vocabs.label))
         # truncated_normal_(model.classifier.weight, mean=0.02, std=0.05)
-        return model
+        return TransformerClassificationModel(transformer, len(self.vocabs.label))
 
     # noinspection PyMethodOverriding
     def build_dataloader(self, data, batch_size, shuffle, device, text_a_key, text_b_key,
@@ -277,7 +275,7 @@ class TransformerClassifier(TransformerComponent):
                 else:
                     raise ValueError('Wrong dataset format')
                 report = {'text_a_key', 'text_b_key', 'label_key'}
-                report = dict((k, self.config[k]) for k in report)
+                report = {k: self.config[k] for k in report}
                 report = [f'{k}={v}' for k, v in report.items() if v]
                 report = ', '.join(report)
                 logger.info(f'Guess [bold][blue]{report}[/blue][/bold] according to the headers of training dataset: '
@@ -297,7 +295,7 @@ class TransformerClassifier(TransformerComponent):
             if dataset.cache and len(dataset) > 1000:
                 timer = CountdownTimer(len(dataset))
                 lens = []
-                for idx, sample in enumerate(dataset):
+                for sample in dataset:
                     lens.append(len(sample['input_ids']))
                     timer.log('Pre-processing and caching dataset [blink][yellow]...[/yellow][/blink]',
                               ratio_percentage=None)
@@ -321,7 +319,7 @@ class TransformerClassifier(TransformerComponent):
     def predict(self, data: Union[str, List[str]], batch_size: int = None, **kwargs):
         if not data:
             return []
-        flat = isinstance(data, str) or isinstance(data, tuple)
+        flat = isinstance(data, (str, tuple))
         if flat:
             data = [data]
         samples = []
@@ -377,7 +375,5 @@ class TransformerClassifier(TransformerComponent):
 
     def build_vocabs(self, trn, logger, **kwargs):
         self.vocabs.label = Vocab(pad_token=None, unk_token=None)
-        for each in trn:
-            pass
         self.vocabs.lock()
         self.vocabs.summary(logger)

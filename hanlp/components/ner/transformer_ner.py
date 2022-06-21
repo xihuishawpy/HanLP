@@ -57,27 +57,29 @@ class TransformerNamedEntityRecognizer(TransformerTagger):
         for tags, tokens in zip(batch_tags, sents):
             entities = get_entities(tags)
             if dict_whitelist:
-                matches = dict_whitelist.tokenize(tokens)
-                if matches:
+                if matches := dict_whitelist.tokenize(tokens):
                     # Fix O E-LOC O like predictions
                     entities = get_entities(tags)
                     for label, start, end in entities:
                         if end - start == 1:
-                            tags[start] = 'S-' + label
+                            tags[start] = f'S-{label}'
                         else:
-                            tags[start] = 'B-' + label
+                            tags[start] = f'B-{label}'
                             for i in range(start + 1, end - 1):
-                                tags[i] = 'I-' + label
-                            tags[end - 1] = 'E-' + label
+                                tags[i] = f'I-{label}'
+                            tags[end - 1] = f'E-{label}'
                     for start, end, label in matches:
-                        if (not tags[start][0] in 'ME') and (not tags[end - 1][0] in 'BM'):
+                        if (
+                            tags[start][0] not in 'ME'
+                            and tags[end - 1][0] not in 'BM'
+                        ):
                             if end - start == 1:
-                                tags[start] = 'S-' + label
+                                tags[start] = f'S-{label}'
                             else:
-                                tags[start] = 'B-' + label
+                                tags[start] = f'B-{label}'
                                 for i in range(start + 1, end - 1):
-                                    tags[i] = 'I-' + label
-                                tags[end - 1] = 'E-' + label
+                                    tags[i] = f'I-{label}'
+                                tags[end - 1] = f'E-{label}'
                     entities = get_entities(tags)
             if merge_types and len(entities) > 1:
                 merged_entities = []
@@ -105,9 +107,11 @@ class TransformerNamedEntityRecognizer(TransformerTagger):
         batch_ner = []
         delimiter_in_entity = self.config.get('delimiter_in_entity', ' ')
         for spans_per_sent, tokens in zip(spans, batch.get(f'{self.config.token_key}_', batch[self.config.token_key])):
-            ner_per_sent = []
-            for label, start, end in spans_per_sent:
-                ner_per_sent.append((delimiter_in_entity.join(tokens[start:end]), label, start, end))
+            ner_per_sent = [
+                (delimiter_in_entity.join(tokens[start:end]), label, start, end)
+                for label, start, end in spans_per_sent
+            ]
+
             batch_ner.append(ner_per_sent)
         return batch_ner
 
@@ -214,8 +218,7 @@ class TransformerNamedEntityRecognizer(TransformerTagger):
     def build_dataset(self, data, transform=None, **kwargs):
         dataset = super().build_dataset(data, transform, **kwargs)
         if isinstance(data, str):
-            tagset = self.config.get('tagset', None)
-            if tagset:
+            if tagset := self.config.get('tagset', None):
                 dataset.append_transform(functools.partial(prune_ner_tagset, tagset=tagset))
         return dataset
 

@@ -82,14 +82,20 @@ class GraphAbstractMeaningRepresentationParsing(Task, GraphAbstractMeaningRepres
                                                                                transform=transform, training=training)
         if self.vocabs.mutable:
             GraphAbstractMeaningRepresentationParser.build_vocabs(self, dataset, logger)
-        dataloader = PrefetchDataLoader(
-            DataLoader(batch_sampler=self.sampler_builder.build(lens, shuffle=training,
-                                                                gradient_accumulation=gradient_accumulation),
-                       dataset=dataset,
-                       collate_fn=merge_list_of_dict,
-                       num_workers=0), batchify=self.build_batchify(device, training),
-            prefetch=None)
-        return dataloader
+        return PrefetchDataLoader(
+            DataLoader(
+                batch_sampler=self.sampler_builder.build(
+                    lens,
+                    shuffle=training,
+                    gradient_accumulation=gradient_accumulation,
+                ),
+                dataset=dataset,
+                collate_fn=merge_list_of_dict,
+                num_workers=0,
+            ),
+            batchify=self.build_batchify(device, training),
+            prefetch=None,
+        )
 
     def compute_loss(self,
                      batch: Dict[str, Any],
@@ -98,8 +104,7 @@ class GraphAbstractMeaningRepresentationParsing(Task, GraphAbstractMeaningRepres
         concept_loss, arc_loss, rel_loss, graph_arc_loss = output
         concept_loss, concept_correct, concept_total = concept_loss
         rel_loss, rel_correct, rel_total = rel_loss
-        loss = concept_loss + arc_loss + rel_loss
-        return loss
+        return concept_loss + arc_loss + rel_loss
 
     def decode_output(self,
                       output: Union[torch.Tensor, Dict[str, torch.Tensor], Iterable[torch.Tensor], Any],
@@ -157,8 +162,7 @@ class GraphAbstractMeaningRepresentationParsing(Task, GraphAbstractMeaningRepres
         beam_size = self.config.get('beam_size', 8)
         alpha = self.config.get('alpha', 0.6)
         max_time_step = self.config.get('max_time_step', 100)
-        res = parse_batch(decoder, batch, beam_size, alpha, max_time_step, h=h)
-        return res
+        return parse_batch(decoder, batch, beam_size, alpha, max_time_step, h=h)
 
     def transform_batch(self, batch: Dict[str, Any], results: Dict[str, Any] = None, cls_is_bos=False,
                         sep_is_eos=False) -> Dict[str, Any]:
@@ -170,5 +174,4 @@ class GraphAbstractMeaningRepresentationParsing(Task, GraphAbstractMeaningRepres
         copy_seq.pop('token')
         copy_seq.pop('lemma')
         batch.update(copy_seq)
-        ret = batchify(batch, self.vocabs, device=batch['token_input_ids'].device)
-        return ret
+        return batchify(batch, self.vocabs, device=batch['token_input_ids'].device)

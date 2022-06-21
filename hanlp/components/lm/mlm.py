@@ -42,9 +42,11 @@ class MaskedLanguageModel(TorchComponent):
             lens.append(len(each['token_input_ids']))
             if verbose:
                 verbose.log('Preprocessing and caching samples [blink][yellow]...[/yellow][/blink]')
-        dataloader = PadSequenceDataLoader(dataset, batch_sampler=SortingSampler(lens, batch_size=batch_size),
-                                           device=device)
-        return dataloader
+        return PadSequenceDataLoader(
+            dataset,
+            batch_sampler=SortingSampler(lens, batch_size=batch_size),
+            device=device,
+        )
 
     def build_optimizer(self, **kwargs):
         raise NotImplementedError()
@@ -87,9 +89,11 @@ class MaskedLanguageModel(TorchComponent):
                 masked_logits = outputs.logits[mask]
                 masked_logits[:, self.tokenizer.all_special_ids] = -math.inf
                 probs, indices = torch.nn.functional.softmax(masked_logits, dim=-1).topk(topk)
-                br = []
-                for p, index in zip(probs.tolist(), indices.tolist()):
-                    br.append(dict(zip(self.tokenizer.convert_ids_to_tokens(index), p)))
+                br = [
+                    dict(zip(self.tokenizer.convert_ids_to_tokens(index), p))
+                    for p, index in zip(probs.tolist(), indices.tolist())
+                ]
+
                 offset = 0
                 for n in num_masks:
                     results.append(br[offset:offset + n])

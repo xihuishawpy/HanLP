@@ -186,13 +186,12 @@ class BiaffineNamedEntityRecognizer(TorchComponent):
     def build_model(self,
                     training=True,
                     **kwargs) -> torch.nn.Module:
-        # noinspection PyTypeChecker
-        # embed: torch.nn.Embedding = self.config.embed.module(vocabs=self.vocabs)[0].embed
-        model = BiaffineNamedEntityRecognitionModel(self.config,
-                                                    self.config.embed.module(vocabs=self.vocabs),
-                                                    self.config.context_layer,
-                                                    len(self.vocabs.label))
-        return model
+        return BiaffineNamedEntityRecognitionModel(
+            self.config,
+            self.config.embed.module(vocabs=self.vocabs),
+            self.config.context_layer,
+            len(self.vocabs.label),
+        )
 
     # noinspection PyMethodOverriding
     def build_dataloader(self, data, batch_size, shuffle, device, logger: logging.Logger = None, vocabs=None,
@@ -253,7 +252,7 @@ class BiaffineNamedEntityRecognizer(TorchComponent):
     def prediction_to_result(token, prediction, predictions: List, ret_tokens: Union[bool, str]):
         for tokens, ner in zip(token, prediction):
             prediction_per_sent = []
-            for i, (b, e, l) in enumerate(ner):
+            for b, e, l in ner:
                 if ret_tokens is not None:
                     entity = tokens[b: e + 1]
                     if isinstance(ret_tokens, str):
@@ -370,9 +369,7 @@ class BiaffineNamedEntityRecognizer(TorchComponent):
         candidates = []
         for sid, sent in enumerate(sentences):
             for s in range(len(sent)):
-                for e in range(s, len(sent)):
-                    candidates.append((sid, s, e))
-
+                candidates.extend((sid, s, e) for e in range(s, len(sent)))
         top_spans = [[] for _ in range(len(sentences))]
         span_scores_cpu = span_scores.tolist()
         for i, type in enumerate(torch.argmax(span_scores, dim=-1).tolist()):
@@ -393,7 +390,12 @@ class BiaffineNamedEntityRecognizer(TorchComponent):
                         break
                 else:
                     sent_pred_mentions[sid].append((ns, ne, t))
-        pred_mentions = set((sid, s, e, t) for sid, spr in enumerate(sent_pred_mentions) for s, e, t in spr)
+        pred_mentions = {
+            (sid, s, e, t)
+            for sid, spr in enumerate(sent_pred_mentions)
+            for s, e, t in spr
+        }
+
         prediction = [[] for _ in range(len(sentences))]
         idx_to_label = self.vocabs['label'].idx_to_token
         for sid, s, e, t in sorted(pred_mentions):

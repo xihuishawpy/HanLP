@@ -84,8 +84,13 @@ class SentenceBoundaryDetectionDataset(TransformableDataset):
             eos_chars = Counter()
             for i in eos_offsets:
                 eos_chars[corpus[i]] += 1
-            self.eos_chars = set(k for (k, v) in eos_chars.most_common() if
-                                 v >= self.eos_char_min_freq and (not self.eos_char_is_punct or ispunct(k)))
+            self.eos_chars = {
+                k
+                for (k, v) in eos_chars.most_common()
+                if v >= self.eos_char_min_freq
+                and (not self.eos_char_is_punct or ispunct(k))
+            }
+
             cprint(f'eos_chars = [yellow]{self.eos_chars}[/yellow]')
 
         eos_index = 0

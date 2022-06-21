@@ -128,10 +128,13 @@ class CRFConstituencyParser(TorchComponent):
         idx_to_token = self.vocabs.chart.idx_to_token
         if tokens is None:
             tokens = [x[1:-1] for x in batch['token']]
-        trees = [build_tree(token, [(i, j, idx_to_token[label]) for i, j, label in chart]) for token, chart in
-                 zip(tokens, chart_preds)]
         # probs = [prob[:i - 1, 1:i].cpu() for i, prob in zip(lens, s_span.unbind())]
-        return trees
+        return [
+            build_tree(
+                token, [(i, j, idx_to_token[label]) for i, j, label in chart]
+            )
+            for token, chart in zip(tokens, chart_preds)
+        ]
 
     def update_metrics(self, metric, batch, prediction):
         # Add pre-terminals (pos tags) back to prediction for safe factorization (deletion based on pos)
@@ -239,7 +242,7 @@ class CRFConstituencyParser(TorchComponent):
                                            **merge_dict(self.config, batch_size=batch_size, overwrite=True))
         outputs = []
         orders = []
-        for idx, batch in enumerate(dataloader):
+        for batch in dataloader:
             out, mask = self.feed_batch(batch)
             prediction = self.decode_output(out, mask, batch, span_probs=None)
             # prediction = [x[0] for x in prediction]
@@ -300,10 +303,9 @@ class CRFConstituencyParser(TorchComponent):
         ]
         if self.config.get('no_subcategory', True):
             _transform.insert(0, remove_subcategory)
-        dataset = ConstituencyDataset(data,
-                                      transform=_transform,
-                                      cache=isinstance(data, str))
-        return dataset
+        return ConstituencyDataset(
+            data, transform=_transform, cache=isinstance(data, str)
+        )
 
     def build_vocabs(self, trn, logger, **kwargs):
         self.vocabs.chart = VocabWithNone(pad_token=None, unk_token=None)

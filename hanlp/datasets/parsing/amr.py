@@ -27,8 +27,7 @@ class AbstractMeaningRepresentationDataset(TransformableDataset):
 
 
 def generate_oracle(sample: dict):
-    amr = sample.get('amr', None)
-    if amr:
+    if amr := sample.get('amr', None):
         concept, edge, _ = amr.root_centered_sort()
         sample['concept'] = concept
         sample['edge'] = edge
@@ -57,7 +56,7 @@ def get_concepts(sample: dict, vocab: VocabWithFrequency = None, rel_vocab: Voca
     cp_seq, mp_seq = [], []
     new_tokens = set()
     for le, to in zip(lem, tok):
-        cp_seq.append(le + '_')
+        cp_seq.append(f'{le}_')
         mp_seq.append(le)
 
     for cp, mp in zip(cp_seq, mp_seq):
@@ -127,10 +126,7 @@ def batchify(data, vocabs: VocabDict, unk_rate=0., device=None, squeeze=False,
                     # l=1 => pos=l+1=2
                     _rel[l + 1, bidx, 1:l + 1] = rel_vocab.get_idx(NIL)
             for v, u, r in x:
-                if levi_graph:
-                    r = 1
-                else:
-                    r = rel_vocab.get_idx(r)
+                r = 1 if levi_graph else rel_vocab.get_idx(r)
                 assert v > u, 'Invalid typological order'
                 _rel[v + 1, bidx, u + 1] = r
         ret.update(
@@ -182,7 +178,7 @@ def make_batch_for_bart(augmented_concept, ret, tokenizer, device, training=True
 def levi_amr(concept, edge, extra_arc=False):
     concept_with_rel = []
     edge_with_rel = []
-    for bidx, (edge_i, concept_i) in enumerate(zip(edge, concept)):
+    for edge_i, concept_i in zip(edge, concept):
         concept_i, edge_i = linearize(concept_i, edge_i, NIL, prefix=REL, extra_arc=extra_arc)
         # This is a undirectional graph, so we can safely reverse edge
         edge_i = [tuple(reversed(sorted(x[:2]))) + x[2:] for x in edge_i]
@@ -262,14 +258,12 @@ def linearize(concept: List, edge: List, label='', prefix=REL, extra_arc=False):
         vur[v][u] = r
     concept_with_rel = []
     edge_with_rel = []
-    reorder = dict()
+    reorder = {}
     for v, c in enumerate(concept):
         reorder[v] = len(concept_with_rel)
         concept_with_rel.append(c)
         ur = vur[v]
-        for u, r in ur.items():
-            if u < v:
-                concept_with_rel.append(prefix + r)
+        concept_with_rel.extend(prefix + r for u, r in ur.items() if u < v)
     for k, v in reorder.items():
         assert concept[k] == concept_with_rel[v]
     for v, c in enumerate(concept):
@@ -279,8 +273,7 @@ def linearize(concept: List, edge: List, label='', prefix=REL, extra_arc=False):
                 _v = reorder[v]
                 _u = reorder[u]
                 _m = _v + i + 1
-                edge_with_rel.append((_v, _m, label))
-                edge_with_rel.append((_m, _u, label))
+                edge_with_rel.extend(((_v, _m, label), (_m, _u, label)))
                 if extra_arc:
                     edge_with_rel.append((_v, _u, label))
     return concept_with_rel, edge_with_rel
@@ -304,7 +297,7 @@ def unlinearize(concept: List, edge: List, prefix=REL, extra_arc=False):
 
 
 def separate_concept_rel(concept, prefix=REL):
-    reorder = dict()
+    reorder = {}
     real_concept = []
     for i, c in enumerate(concept):
         if not c.startswith(prefix):
@@ -325,22 +318,24 @@ def remove_unconnected_components(concept: List, edge: List):
         unique, counts = np.unique(labels, return_counts=True)
         largest_component = max(zip(counts, unique))[-1]
         connected_nodes = set(np.where(labels == largest_component)[0])
-        reorder = dict()
+        reorder = {}
         good_concept = []
-        good_edge = []
         for i, c in enumerate(concept):
             if i in connected_nodes:
                 reorder[i] = len(good_concept)
                 good_concept.append(c)
-        for v, u, r in edge:
-            if v in connected_nodes and u in connected_nodes:
-                good_edge.append((reorder[v], reorder[u], r))
+        good_edge = [
+            (reorder[v], reorder[u], r)
+            for v, u, r in edge
+            if v in connected_nodes and u in connected_nodes
+        ]
+
         concept, edge = good_concept, good_edge
     return concept, edge
 
 
 def largest_connected_component(triples: List):
-    node_to_id = dict()
+    node_to_id = {}
     concept = []
     edge = []
     for u, r, v in triples:
@@ -371,11 +366,11 @@ def un_kahn(concept, edge):
     # (['want', 'rel=ARG1', 'rel=ARG0', 'believe', 'rel=ARG1', 'rel=ARG0', 'boy', 'girl'],
     # [(0, 1, 0.9999417066574097), (0, 2, 0.9999995231628418), (1, 3, 0.9999992847442627), (3, 4, 1.0), (3, 5, 0.9999996423721313), (2, 6, 0.9996106624603271), (4, 6, 0.9999767541885376), (5, 7, 0.9999860525131226)])
     real_concept, reorder = separate_concept_rel(concept)
-    tri_edge = dict()
+    tri_edge = {}
     for m, (a, b, p1) in enumerate(edge):
         if concept[a].startswith(REL):
             continue
-        for n, (c, d, p2) in enumerate(edge[m + 1:]):
+        for c, d, p2 in edge[m + 1:]:
             if b == c:
                 key = (a, d)
                 _, p = tri_edge.get(key, (None, 0))

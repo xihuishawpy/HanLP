@@ -22,7 +22,7 @@ class Tarjan:
             the tokens we care about (i.e. exclude _GO, _EOS, and _PAD)
         """
         self._edges = defaultdict(set)
-        self._vertices = set((0,))
+        self._vertices = {0}
         for dep, head in enumerate(prediction[tokens]):
             self._vertices.add(dep + 1)
             self._edges[head].add(dep + 1)
@@ -95,7 +95,7 @@ class UnionFind(object):
 
     def __init__(self, n) -> None:
         super().__init__()
-        self.parent = [x for x in range(n)]
+        self.parent = list(range(n))
         self.height = [0] * n
 
     def find(self, x):
@@ -141,9 +141,9 @@ def tarjan(parse_probs, length, tokens_to_keep, ensure_tree=True):
             if len(SCC) > 1:
                 dependents = set()
                 to_visit = set(SCC)
-                while len(to_visit) > 0:
+                while to_visit:
                     node = to_visit.pop()
-                    if not node in dependents:
+                    if node not in dependents:
                         dependents.add(node)
                         to_visit.update(tarjan.edges[node])
                 # The indices of the nodes that participate in the cycle
@@ -166,12 +166,12 @@ def tarjan(parse_probs, length, tokens_to_keep, ensure_tree=True):
                 parse_preds[changed_cycle] = new_head
                 tarjan.edges[new_head].add(changed_cycle)
                 tarjan.edges[old_head].remove(changed_cycle)
-        return parse_preds
     else:
         # block and pad heads
         parse_probs = parse_probs * tokens_to_keep
         parse_preds = np.argmax(parse_probs, axis=1)
-        return parse_preds
+
+    return parse_preds
 
 
 def chu_liu_edmonds(parse_probs, length):

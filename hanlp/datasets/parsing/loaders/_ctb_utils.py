@@ -95,7 +95,7 @@ def convert_to_dependency(src, dst, language='zh', version='3.3.0', conllx=True,
     if conllx:
         cmd += ' -conllx'
     if not ud:
-        cmd += f' -basic -keepPunct'
+        cmd += ' -basic -keepPunct'
     code, out, err = get_exitcode_stdout_stderr(cmd)
     with open(dst, 'w') as f:
         f.write(out)
@@ -110,8 +110,7 @@ def clean_ctb_bracketed(ctb_root, out_root):
     chtbs = _list_treebank_root(ctb_root)
     timer = CountdownTimer(len(chtbs))
     for f in chtbs:
-        with open(join(ctb_root, f), encoding='utf-8') as src, open(join(out_root, f + '.txt'), 'w',
-                                                                    encoding='utf-8') as out:
+        with open(join(ctb_root, f), encoding='utf-8') as src, open(join(out_root, f'{f}.txt'), 'w', encoding='utf-8') as out:
             for line in src:
                 if not line.strip().startswith('<'):
                     out.write(line)
@@ -147,10 +146,9 @@ def split_str_to_trees(text: str):
     for line in text.split('\n'):
         if not line.strip():
             continue
-        if line.startswith('('):
-            if buffer:
-                trees.append('\n'.join(buffer).strip())
-                buffer = []
+        if line.startswith('(') and buffer:
+            trees.append('\n'.join(buffer).strip())
+            buffer = []
         buffer.append(line)
     if buffer:
         trees.append('\n'.join(buffer).strip())
@@ -162,9 +160,7 @@ def make_ctb_tasks(chtbs, out_root, part):
         os.makedirs(join(out_root, task), exist_ok=True)
     timer = CountdownTimer(len(chtbs))
     par_path = join(out_root, 'par', f'{part}.txt')
-    with open(join(out_root, 'cws', f'{part}.txt'), 'w', encoding='utf-8') as cws, \
-            open(join(out_root, 'pos', f'{part}.tsv'), 'w', encoding='utf-8') as pos, \
-            open(par_path, 'w', encoding='utf-8') as par:
+    with open(join(out_root, 'cws', f'{part}.txt'), 'w', encoding='utf-8') as cws, open(join(out_root, 'pos', f'{part}.tsv'), 'w', encoding='utf-8') as pos, open(par_path, 'w', encoding='utf-8') as par:
         for f in chtbs:
             with open(f, encoding='utf-8') as src:
                 content = src.read()
@@ -182,7 +178,7 @@ def make_ctb_tasks(chtbs, out_root, part):
                         tag = tag.split('-')[0]
                         if tag == 'X':  # 铜_NN 30_CD ｘ_X 25_CD ｘ_X 14_CD cm_NT 1999_NT
                             tag = 'FW'
-                        pos.write('{}\t{}\n'.format(word, tag))
+                        pos.write(f'{word}\t{tag}\n')
                         words.append(word)
                     cws.write(' '.join(words))
                     par.write(tree.pformat(margin=sys.maxsize))
@@ -196,7 +192,7 @@ def make_ctb_tasks(chtbs, out_root, part):
     sents = list(read_conll(dep_path))
     with open(dep_path, 'w') as out:
         for sent in sents:
-            for i, cells in enumerate(sent):
+            for cells in sent:
                 tag = cells[3]
                 tag = tag.split('-')[0]  # NT-SHORT ---> NT
                 if tag == 'X':  # 铜_NN 30_CD ｘ_X 25_CD ｘ_X 14_CD cm_NT 1999_NT
@@ -208,7 +204,7 @@ def make_ctb_tasks(chtbs, out_root, part):
 
 
 def reverse_splits(splits):
-    cid_domain = dict()
+    cid_domain = {}
     for domain, cids in splits.items():
         for each in cids:
             cid_domain[each] = domain

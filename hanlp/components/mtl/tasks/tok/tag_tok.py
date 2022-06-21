@@ -94,8 +94,18 @@ class TaggingTokenization(Task, TransformerTaggingTokenizer):
 
     def build_dataloader(self, data, transform: TransformList = None, training=False, device=None,
                          logger: logging.Logger = None, cache=False, gradient_accumulation=1, **kwargs) -> DataLoader:
-        args = dict((k, self.config[k]) for k in
-                    ['delimiter', 'max_seq_len', 'sent_delimiter', 'char_level', 'hard_constraint'] if k in self.config)
+        args = {
+            k: self.config[k]
+            for k in [
+                'delimiter',
+                'max_seq_len',
+                'sent_delimiter',
+                'char_level',
+                'hard_constraint',
+            ]
+            if k in self.config
+        }
+
         # We only need those transforms before TransformerTokenizer
         transformer_index = transform.index_by_type(TransformerSequenceTokenizer)
         assert transformer_index is not None

@@ -34,10 +34,9 @@ class Ontonotes(_Ontonotes):
             if line != "" and not line.startswith("#"):
                 # Non-empty line. Collect the annotation.
                 conll_rows.append(line)
-            else:
-                if conll_rows:
-                    document.append(self._conll_rows_to_sentence(conll_rows))
-                    conll_rows = []
+            elif conll_rows:
+                document.append(self._conll_rows_to_sentence(conll_rows))
+                conll_rows = []
             if line.startswith("#end document"):
                 yield document
                 document = []

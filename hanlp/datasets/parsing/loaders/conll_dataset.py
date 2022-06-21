@@ -46,9 +46,11 @@ class CoNLLParsingDataset(TransformableDataset):
                            'FEATS', 'HEAD', 'DEPREL', 'PHEAD', 'PDEPREL']
         fp = TimingFileIterator(filepath)
         for idx, sent in enumerate(read_conll(fp)):
-            sample = {}
-            for i, field in enumerate(field_names):
-                sample[field] = [cell[i] for cell in sent]
+            sample = {
+                field: [cell[i] for cell in sent]
+                for i, field in enumerate(field_names)
+            }
+
             if not self._prune or not self._prune(sample):
                 yield sample
             fp.log(f'{idx + 1} samples [blink][yellow]...[/yellow][/blink]')
@@ -88,8 +90,7 @@ def append_bos_eos(sample: dict) -> dict:
 
 
 def get_sibs(sample: dict) -> dict:
-    heads = sample.get('arc', None)
-    if heads:
+    if heads := sample.get('arc', None):
         sibs = [-1] * len(heads)
         for i in range(1, len(heads)):
             hi = heads[i]

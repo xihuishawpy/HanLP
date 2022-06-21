@@ -143,14 +143,15 @@ class TransformerTagger(TransformerComponent, Tagger):
         return kd_criterion(logits_S, logits_T, temperature)
 
     def build_model(self, training=True, extra_embeddings: Embedding = None, **kwargs) -> torch.nn.Module:
-        model = TransformerTaggingModel(
+        return TransformerTaggingModel(
             self.build_transformer(training=training),
             len(self.vocabs.tag),
             self.config.crf,
             self.config.get('secondary_encoder', None),
-            extra_embeddings=extra_embeddings.module(self.vocabs) if extra_embeddings else None,
+            extra_embeddings=extra_embeddings.module(self.vocabs)
+            if extra_embeddings
+            else None,
         )
-        return model
 
     # noinspection PyMethodOverriding
     def build_dataloader(self, data, batch_size, shuffle, device, logger: logging.Logger = None,
@@ -159,8 +160,17 @@ class TransformerTagger(TransformerComponent, Tagger):
         if isinstance(data, TransformableDataset):
             dataset = data
         else:
-            args = dict((k, self.config.get(k, None)) for k in
-                        ['delimiter', 'max_seq_len', 'sent_delimiter', 'char_level', 'hard_constraint'])
+            args = {
+                k: self.config.get(k, None)
+                for k in [
+                    'delimiter',
+                    'max_seq_len',
+                    'sent_delimiter',
+                    'char_level',
+                    'hard_constraint',
+                ]
+            }
+
             dataset = self.build_dataset(data, **args)
         if self.config.token_key is None:
             self.config.token_key = next(iter(dataset[0]))
@@ -191,8 +201,7 @@ class TransformerTagger(TransformerComponent, Tagger):
         return TSVTaggingDataset(data, transform=transform, **kwargs)
 
     def last_transform(self):
-        transforms = TransformList(self.vocabs, FieldLength(self.config.token_key))
-        return transforms
+        return TransformList(self.vocabs, FieldLength(self.config.token_key))
 
     @property
     def tokenizer_transform(self) -> TransformerSequenceTokenizer:
@@ -253,10 +262,7 @@ class TransformerTagger(TransformerComponent, Tagger):
 
     def feed_batch(self, batch: dict):
         features = [batch[k] for k in self.tokenizer_transform.output_key]
-        if len(features) == 2:
-            input_ids, token_span = features
-        else:
-            input_ids, token_span = features[0], None
+        input_ids, token_span = features if len(features) == 2 else (features[0], None)
         lens = batch[f'{self.config.token_key}_length']
         x, mask = self.model(lens, input_ids, token_span, batch.get(f'{self.config.token_key}_token_type_ids'),
                              batch=batch)

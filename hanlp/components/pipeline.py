@@ -39,7 +39,11 @@ class Pipe(Component):
                     input = [doc[key] for key in self.input_key]
                     unpack = True
                 else:
-                    input = list(list(zip(*sent)) for sent in zip(*[doc[key] for key in self.input_key]))
+                    input = [
+                        list(zip(*sent))
+                        for sent in zip(*[doc[key] for key in self.input_key])
+                    ]
+
             else:
                 input = doc[self.input_key]
         else:

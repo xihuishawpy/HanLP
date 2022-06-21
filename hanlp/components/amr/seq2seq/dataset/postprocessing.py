@@ -36,9 +36,11 @@ def decode_into_node_and_backreferences(subtoken_ids, tokenizer):
     subtokens = tokenizer.convert_ids_to_tokens(subtoken_ids)
     # fix backreferences
     subtoken_backreferences = [max(t - len(tokenizer), -1) for t in subtoken_ids]
-    # strip padding
-    no_pad = [(s, b) for s, b in zip(subtokens, subtoken_backreferences) if s != (tokenizer.INIT + '<pad>')]
-    if no_pad:
+    if no_pad := [
+        (s, b)
+        for s, b in zip(subtokens, subtoken_backreferences)
+        if s != f'{tokenizer.INIT}<pad>'
+    ]:
         subtokens, subtoken_backreferences = zip(*no_pad)
     else:
         subtokens, subtoken_backreferences = ['<s>'], [-1]
@@ -174,10 +176,7 @@ def decode_into_node_and_backreferences(subtoken_ids, tokenizer):
 
     tokens = [token_processing(t) for t in tokens]
 
-    shift = 1
-    if len(tokens) > 1 and tokens[1] == '<s>':
-        shift = 2
-
+    shift = 2 if len(tokens) > 1 and tokens[1] == '<s>' else 1
     tokens = tokens[shift:]
     backreferences = [b if b == -1 else b - shift for b in backreferences[shift:]]
 
@@ -196,9 +195,11 @@ def decode_into_node_and_backreferences_without_space(subtoken_ids, tokenizer):
     subtokens = tokenizer.convert_ids_to_tokens(subtoken_ids)
     # fix backreferences
     subtoken_backreferences = [max(t - len(tokenizer), -1) for t in subtoken_ids]
-    # strip padding
-    no_pad = [(s, b) for s, b in zip(subtokens, subtoken_backreferences) if s != (tokenizer.INIT + '<pad>')]
-    if no_pad:
+    if no_pad := [
+        (s, b)
+        for s, b in zip(subtokens, subtoken_backreferences)
+        if s != f'{tokenizer.INIT}<pad>'
+    ]:
         subtokens, subtoken_backreferences = zip(*no_pad)
     else:
         subtokens, subtoken_backreferences = ['<s>'], [-1]
@@ -343,10 +344,7 @@ def decode_into_node_and_backreferences_without_space(subtoken_ids, tokenizer):
 
     tokens = [token_processing(t) for t in tokens]
 
-    shift = 0
-    if len(tokens) > 1 and tokens[1] == '<s>':
-        shift = 1
-
+    shift = 1 if len(tokens) > 1 and tokens[1] == '<s>' else 0
     tokens = tokens[shift:]
     backreferences = [b if b == -1 else b - shift for b in backreferences[shift:]]
 
@@ -404,10 +402,11 @@ def separate_edges_nodes(edges_nodes_slice, *other):
 
 def _split_name_ops(graph):
     # identify name triples
-    name_vars = {}
-    for i, (v1, rel, v2) in enumerate(graph.triples):
-        if rel == ':instance' and v2 == 'name':
-            name_vars[v1] = 1
+    name_vars = {
+        v1: 1
+        for v1, rel, v2 in graph.triples
+        if rel == ':instance' and v2 == 'name'
+    }
 
     # check if they have ops
     name_vars_to_ops = defaultdict(list)
@@ -426,7 +425,7 @@ def _split_name_ops(graph):
 
         tt = []
         for i, l in enumerate(lits, start=1):
-            rel = ':op' + str(i)
+            rel = f':op{str(i)}'
             tt.append(penman.Triple(nv, rel, l))
 
         triples[min(idx)] = tt

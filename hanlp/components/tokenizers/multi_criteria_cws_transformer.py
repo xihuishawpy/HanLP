@@ -34,9 +34,13 @@ class MultiCriteriaTransformerTaggingTokenizer(TransformerTaggingTokenizer):
         if 'criteria_token_map' not in self.config:
             unused_tokens = [f'[unused{i}]' for i in range(1, 100)]
             ids = self.transformer_tokenizer.convert_tokens_to_ids(unused_tokens)
-            self.config.unused_tokens = dict((x, ids[i]) for i, x in enumerate(unused_tokens) if
-                                             ids[i] != self.transformer_tokenizer.unk_token_id)
-            self.config.criteria_token_map = dict()
+            self.config.unused_tokens = {
+                x: ids[i]
+                for i, x in enumerate(unused_tokens)
+                if ids[i] != self.transformer_tokenizer.unk_token_id
+            }
+
+            self.config.criteria_token_map = {}
 
     def last_transform(self):
         transforms = super().last_transform()

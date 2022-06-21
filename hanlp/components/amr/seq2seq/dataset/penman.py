@@ -75,9 +75,7 @@ def pm_encode(g, top=None, indent=-1, compact=False):
 
 
 def role_is_reverted(role: str):
-    if role.endswith('consist-of'):
-        return False
-    return role.endswith('-of')
+    return False if role.endswith('consist-of') else role.endswith('-of')
 
 
 class AMRGraph(penman.Graph):

@@ -97,11 +97,9 @@ class BiaffineSecondaryDependencyParsing(Task, BiaffineSecondaryParser):
 
     def build_optimizer(self, decoder: torch.nn.Module, **kwargs):
         config = self.config
-        optimizer = torch.optim.Adam(decoder.parameters(),
-                                     config.lr,
-                                     (config.mu, config.nu),
-                                     config.epsilon)
-        return optimizer
+        return torch.optim.Adam(
+            decoder.parameters(), config.lr, (config.mu, config.nu), config.epsilon
+        )
 
     def input_is_flat(self, data) -> bool:
         return BiaffineSecondaryParser.input_is_flat(self, data)

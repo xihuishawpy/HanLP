@@ -25,8 +25,7 @@ class RNNTokenizer(RNNTagger):
 
     def predict_data(self, data, batch_size, **kwargs):
         tags = RNNTagger.predict_data(self, data, batch_size, **kwargs)
-        words = [bmes_to_words(c, t) for c, t in zip(data, tags)]
-        return words
+        return [bmes_to_words(c, t) for c, t in zip(data, tags)]
 
     def build_dataset(self, data, transform=None):
         dataset = ChunkingDataset(data)

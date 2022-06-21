@@ -138,8 +138,7 @@ class TransformerTaggingTokenizer(TransformerTagger):
                             tags[end] = 'B'
                 spans.append(bmes_to_spans(tags))
         else:
-            for tags in batch_tags:
-                spans.append(bmes_to_spans(tags))
+            spans.extend(bmes_to_spans(tags) for tags in batch_tags)
         return spans
 
     def write_prediction(self, prediction, batch, output: TextIO):
@@ -210,8 +209,7 @@ class TransformerTaggingTokenizer(TransformerTagger):
             for toks, offs, subs in zip(tokens, pred, subtoken_spans):
                 r = []
                 results.append(r)
-                for t, (b, e) in zip(toks, offs):
-                    r.append([t, subs[b][0], subs[e - 1][-1]])
+                r.extend([t, subs[b][0], subs[e - 1][-1]] for t, (b, e) in zip(toks, offs))
             return results
         return tokens
 

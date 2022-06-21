@@ -14,12 +14,12 @@ def _list_dir(path, home):
     import os
     path = get_resource(path)
     with open('ud23.py', 'a') as out:
-        for f in sorted(glob.glob(path + '/UD_*')):
+        for f in sorted(glob.glob(f'{path}/UD_*')):
             basename = os.path.basename(f)
             name = basename[len('UD_'):]
             name = name.upper().replace('-', '_')
             for split in 'train', 'dev', 'test':
-                sp = glob.glob(f + f'/*{split}.conllu')
+                sp = glob.glob(f'{f}/*{split}.conllu')
                 if not sp:
                     continue
                 sp = os.path.basename(sp[0])
@@ -28,7 +28,6 @@ def _list_dir(path, home):
 
 def main():
     _list_dir(_UD_23_HOME, '_UD_23_HOME')
-    pass
 
 
 if __name__ == '__main__':

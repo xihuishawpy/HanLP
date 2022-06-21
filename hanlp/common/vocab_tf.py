@@ -14,9 +14,9 @@ class VocabTF(Serializable):
                  unk_token=UNK) -> None:
         super().__init__()
         if idx_to_token:
-            t2i = dict((token, idx) for idx, token in enumerate(idx_to_token))
+            t2i = {token: idx for idx, token in enumerate(idx_to_token)}
             if token_to_idx:
-                t2i.update(token_to_idx)
+                t2i |= token_to_idx
             token_to_idx = t2i
         if token_to_idx is None:
             token_to_idx = {}
@@ -167,22 +167,17 @@ class VocabTF(Serializable):
         return self.token_to_idx.__str__()
 
     def summary(self, verbose=True) -> str:
-        # report = 'Length: {}\n'.format(len(self))
-        # report += 'Samples: {}\n'.format(str(list(self.token_to_idx.keys())[:min(50, len(self))]))
-        # report += 'Mutable: {}'.format(self.mutable)
-        # report = report.strip()
-        report = '[{}] = '.format(len(self))
-        report += str(list(self.token_to_idx.keys())[:min(50, len(self))])
+        report = f'[{len(self)}] = ' + str(
+            list(self.token_to_idx.keys())[: min(50, len(self))]
+        )
+
         if verbose:
             print(report)
         return report
 
     def __call__(self, some_token: Union[str, List[str]]) -> Union[int, List[int]]:
         if isinstance(some_token, list):
-            indices = []
-            for token in some_token:
-                indices.append(self.get_idx(token))
-            return indices
+            return [self.get_idx(token) for token in some_token]
         else:
             return self.get_idx(some_token)
 
