@@ -84,11 +84,7 @@ def decode_mst(
     )
 
     heads = numpy.zeros([max_length], numpy.int32)
-    if has_labels:
-        head_type = numpy.ones([max_length], numpy.int32)
-    else:
-        head_type = None
-
+    head_type = numpy.ones([max_length], numpy.int32) if has_labels else None
     for child, parent in final_edges.items():
         heads[child] = parent
         if has_labels:
@@ -182,10 +178,7 @@ def chu_liu_edmonds(
     # Otherwise, we have a cycle so we need to remove an edge.
     # From here until the recursive call is the contraction stage of the algorithm.
     cycle_weight = 0.0
-    # Find the weight of the cycle.
-    index = 0
     for node in cycle:
-        index += 1
         cycle_weight += score_matrix[parents[node], node]
 
     # For each node in the graph, find the maximum weight incoming
@@ -286,8 +279,7 @@ def _find_cycle(
         if added[i] or not current_nodes[i]:
             continue
         # Initialize a new possible cycle.
-        this_cycle = set()
-        this_cycle.add(i)
+        this_cycle = {i}
         added[i] = True
         has_cycle = True
         next_node = i

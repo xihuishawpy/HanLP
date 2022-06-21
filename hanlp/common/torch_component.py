@@ -65,7 +65,12 @@ class TorchComponent(Component, ABC):
         """
         if 'kwargs' in locals_:
             locals_.update(locals_['kwargs'])
-        locals_ = dict((k, v) for k, v in locals_.items() if k not in exclude and not k.startswith('_'))
+        locals_ = {
+            k: v
+            for k, v in locals_.items()
+            if k not in exclude and not k.startswith('_')
+        }
+
         self.config.update(locals_)
         return self.config
 
@@ -82,8 +87,8 @@ class TorchComponent(Component, ABC):
         model = self.model_
         state_dict = model.state_dict()
         if trainable_only:
-            trainable_names = set(n for n, p in model.named_parameters() if p.requires_grad)
-            state_dict = dict((n, p) for n, p in state_dict.items() if n in trainable_names)
+            trainable_names = {n for n, p in model.named_parameters() if p.requires_grad}
+            state_dict = {n: p for n, p in state_dict.items() if n in trainable_names}
         torch.save(state_dict, os.path.join(save_dir, filename))
 
     def load_weights(self, save_dir, filename='model.pt', **kwargs):
@@ -276,9 +281,14 @@ class TorchComponent(Component, ABC):
         criterion = self.build_criterion(**merge_dict(config, trn=trn))
         optimizer = self.build_optimizer(**merge_dict(config, trn=trn, criterion=criterion))
         metric = self.build_metric(**self.config)
-        if hasattr(trn, 'dataset') and dev and hasattr(dev, 'dataset'):
-            if trn.dataset and dev.dataset:
-                logger.info(f'{len(trn.dataset)}/{len(dev.dataset)} samples in trn/dev set.')
+        if (
+            hasattr(trn, 'dataset')
+            and dev
+            and hasattr(dev, 'dataset')
+            and trn.dataset
+            and dev.dataset
+        ):
+            logger.info(f'{len(trn.dataset)}/{len(dev.dataset)} samples in trn/dev set.')
         if hasattr(trn, '__len__') and dev and hasattr(dev, '__len__'):
             trn_size = len(trn) // self.config.get('gradient_accumulation', 1)
             ratio_width = len(f'{trn_size}/{trn_size}')
@@ -304,8 +314,9 @@ class TorchComponent(Component, ABC):
         Returns:
             logging.Logger: A logger.
         """
-        logger = init_logger(name=name, root_dir=save_dir, level=logging.INFO, fmt="%(message)s")
-        return logger
+        return init_logger(
+            name=name, root_dir=save_dir, level=logging.INFO, fmt="%(message)s"
+        )
 
     @abstractmethod
     def build_dataloader(self, data, batch_size, shuffle=False, device=None, logger: logging.Logger = None,
@@ -502,7 +513,7 @@ class TorchComponent(Component, ABC):
         assert isinstance(tst_data,
                           str), 'tst_data has be a str in order to infer the output name'
         output = os.path.splitext(os.path.basename(tst_data))
-        output = os.path.join(save_dir, output[0] + '.pred' + output[1])
+        output = os.path.join(save_dir, f'{output[0]}.pred{output[1]}')
         return output
 
     def to(self,
@@ -515,15 +526,16 @@ class TorchComponent(Component, ABC):
             logger: Logger for printing progress report, as copying a model from CPU to GPU can takes several seconds.
             verbose: ``True`` to print progress when logger is None.
         """
-        if devices is None:
-            if getattr(torch, 'has_mps', None):  # mac M1 chips
-                devices = torch.device('mps:0')
-            else:
-                devices = cuda_devices(devices)
-        elif devices == -1 or devices == [-1]:
-            devices = []
-        elif isinstance(devices, (int, float)):
+        if devices is None and getattr(torch, 'has_mps', None):  # mac M1 chips
+            devices = torch.device('mps:0')
+        elif (
+            devices is None
+            or devices not in [-1, [-1]]
+            and isinstance(devices, (int, float))
+        ):
             devices = cuda_devices(devices)
+        elif devices in [-1, [-1]]:
+            devices = []
         if devices:
             if logger:
                 logger.info(f'Using GPUs: [on_blue][cyan][bold]{devices}[/bold][/cyan][/on_blue]')
@@ -542,9 +554,8 @@ class TorchComponent(Component, ABC):
                             continue
                         if on_device == device:
                             continue
-                        if isinstance(device, int):
-                            if on_device.index == device:
-                                continue
+                        if isinstance(device, int) and on_device.index == device:
+                            continue
                         if re.match(regex, name):
                             if not name:
                                 name = '*'
@@ -559,9 +570,8 @@ class TorchComponent(Component, ABC):
                 raise ValueError(f'Unrecognized devices {devices}')
             if verbose:
                 flash('')
-        else:
-            if logger:
-                logger.info('Using [red]CPU[/red]')
+        elif logger:
+            logger.info('Using [red]CPU[/red]')
 
     def parallelize(self, devices: List[Union[int, torch.device]]):
         return nn.DataParallel(self.model, device_ids=devices)

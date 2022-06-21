@@ -83,8 +83,7 @@ class Seq2seq_AMR_Parser(TorchComponent):
                                                    remove_space='chinese' in self.config.transformer))
 
     def build_dataset(self, data, generate_idx):
-        dataset = AMRDataset(data, generate_idx=generate_idx)
-        return dataset
+        return AMRDataset(data, generate_idx=generate_idx)
 
     def collect_additional_tokens(self, additional_tokens, dataset):
         pred_min = self.config.pred_min
@@ -287,14 +286,14 @@ class Seq2seq_AMR_Parser(TorchComponent):
     def _model_generate(self, batch, beam_size):
         input_ids = batch['text_token_ids']
         attention_mask = input_ids.ne(self.model.config.pad_token_id).to(torch.long)
-        out = self.model.generate(
+        return self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
             max_length=1024,
             decoder_start_token_id=0,
             num_beams=beam_size,
-            num_return_sequences=beam_size)
-        return out
+            num_return_sequences=beam_size,
+        )
 
     def build_model(self, training=True, **kwargs) -> torch.nn.Module:
         # noinspection PyTypeChecker

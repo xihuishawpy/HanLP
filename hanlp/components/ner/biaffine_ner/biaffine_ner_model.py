@@ -92,11 +92,11 @@ class BiaffineNamedEntityRecognitionDecoder(nn.Module):
         sparse_indices = torch.cat([sentence_indices.unsqueeze(2), span_starts.unsqueeze(2), span_ends.unsqueeze(2)],
                                    dim=2)
         rank = 3
-        dense_labels = torch.sparse.LongTensor(sparse_indices.view(num_sentences * max_spans_num, rank).t(),
-                                               span_labels.view(-1),
-                                               torch.Size([num_sentences] + [max_sentence_length] * (rank - 1))) \
-            .to_dense()
-        return dense_labels
+        return torch.sparse.LongTensor(
+            sparse_indices.view(num_sentences * max_spans_num, rank).t(),
+            span_labels.view(-1),
+            torch.Size([num_sentences] + [max_sentence_length] * (rank - 1)),
+        ).to_dense()
 
     def decode(self, contextualized_embeddings, gold_starts, gold_ends, gold_labels, masks, max_sent_length,
                num_sentences, sent_lengths):

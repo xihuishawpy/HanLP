@@ -59,9 +59,7 @@ class AMRBartTokenizer(BartTokenizer):
                 tokens.append(tok)
 
         if self.use_pointer_tokens:
-            for cnt in range(512):
-                tokens.append(f"<pointer:{cnt}>")
-
+            tokens.extend(f"<pointer:{cnt}>" for cnt in range(512))
         tokens += self.ADDITIONAL
         tokens = [self.INIT + t if t[0] not in ('_', '-') else t for t in tokens]
         tokens = [t for t in tokens if t not in self.encoder]
@@ -90,14 +88,18 @@ class AMRBartTokenizer(BartTokenizer):
         for tok_span in text.lstrip().split(' '):
             tok_span = tok_span.strip()
             recats = tok_span.rsplit('_', 1)
-            if len(recats) == 2 and recats[0] in self.recategorizations and ('_' + recats[1]) in self.encoder:
-                bpe_tokens.extend([self.INIT + recats[0], '_' + recats[1]])
+            if (
+                len(recats) == 2
+                and recats[0] in self.recategorizations
+                and f'_{recats[1]}' in self.encoder
+            ):
+                bpe_tokens.extend([self.INIT + recats[0], f'_{recats[1]}'])
             else:
-                for token in re.findall(self.pat, ' ' + tok_span):
+                for token in re.findall(self.pat, f' {tok_span}'):
                     token = "".join(
                         self.byte_encoder[b] for b in token.encode("utf-8")
                     )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
-                    bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+                    bpe_tokens.extend(iter(self.bpe(token).split(" ")))
 
         return bpe_tokens
 
@@ -107,10 +109,14 @@ class AMRBartTokenizer(BartTokenizer):
         tokk = []
         tok = token.strip()
         recats = tok.rsplit('_', 1)
-        if len(recats) == 2 and recats[0] in self.recategorizations and ('_' + recats[1]) in self.encoder:
-            tokk.extend([self.INIT + recats[0], '_' + recats[1]])
+        if (
+            len(recats) == 2
+            and recats[0] in self.recategorizations
+            and f'_{recats[1]}' in self.encoder
+        ):
+            tokk.extend([self.INIT + recats[0], f'_{recats[1]}'])
         else:
-            for tok in self.patterns.findall(' ' + token):
+            for tok in self.patterns.findall(f' {token}'):
                 tok = "".join(
                     self.byte_encoder[b] for b in tok.encode("utf-8"))
                 toks = self.bpe(tok).split(' ')
@@ -149,20 +155,23 @@ class AMRBartTokenizer(BartTokenizer):
                     bpe_toks = self._tok_bpe(tokk[:-3], add_space=True) + [tokk[-3:]]
                 elif is_of:
                     rel = tokk[:-3]
-                    if self.INIT + rel in self.encoder:
-                        bpe_toks = [self.INIT + rel, '-of']
-                    else:
-                        bpe_toks = [self.INIT + ':'] + self._tok_bpe(rel[1:], add_space=True) + ['-of']
+                    bpe_toks = (
+                        [self.INIT + rel, '-of']
+                        if self.INIT + rel in self.encoder
+                        else [f'{self.INIT}:']
+                        + self._tok_bpe(rel[1:], add_space=True)
+                        + ['-of']
+                    )
+
                 elif is_rel:
-                    bpe_toks = [self.INIT + ':'] + self._tok_bpe(tokk[1:], add_space=True)
+                    bpe_toks = [f'{self.INIT}:'] + self._tok_bpe(tokk[1:], add_space=True)
                 else:
                     raise
 
+            elif is_in_enc:
+                bpe_toks = [self.INIT + tokk]
             else:
-                if is_in_enc:
-                    bpe_toks = [self.INIT + tokk]
-                else:
-                    bpe_toks = self._tok_bpe(tokk, add_space=True)
+                bpe_toks = self._tok_bpe(tokk, add_space=True)
 
             bpe_tokens.append(bpe_toks)
 
@@ -171,7 +180,7 @@ class AMRBartTokenizer(BartTokenizer):
                 counter += len(bpe_toks)
                 bpe_backreferences.append(bpe_backr)
             else:
-                bpe_backreferences.append(bpe_backreferences[backr][0:1])
+                bpe_backreferences.append(bpe_backreferences[backr][:1])
                 counter += 1
         bpe_tokens = [b for bb in bpe_tokens for b in bb]
         bpe_token_ids = [self.encoder.get(b, self.unk_token_id) for b in bpe_tokens]
@@ -179,7 +188,7 @@ class AMRBartTokenizer(BartTokenizer):
         return bpe_tokens, bpe_token_ids, bpe_backreferences
 
     def batch_encode_sentences(self, sentences, device=torch.device('cpu')):
-        sentences = [s for s in sentences]
+        sentences = list(sentences)
         extra = {'sentences': sentences}
         batch = super().batch_encode_plus(sentences, return_tensors='pt', pad_to_max_length=True)
         batch = {k: v.to(device) for k, v in batch.items()}
@@ -266,31 +275,27 @@ class PENMANBartTokenizer(AMRBartTokenizer):
         linearized = re.sub(r"(\".+?\")", r' \1 ', encoded)
         pieces = []
         for piece in linearized.split():
-            if piece.startswith('"') and piece.endswith('"'):
-                pieces.append(piece)
-            else:
+            if not piece.startswith('"') or not piece.endswith('"'):
                 piece = piece.replace('(', ' ( ')
                 piece = piece.replace(')', ' ) ')
                 piece = piece.replace(':', ' :')
                 piece = piece.replace('/', ' / ')
                 piece = piece.strip()
-                pieces.append(piece)
+            pieces.append(piece)
         linearized = re.sub(r'\s+', ' ', ' '.join(pieces)).strip()
-        linearized_nodes = [AMRTokens.BOS_N] + linearized.split(' ')
-        return linearized_nodes
+        return [AMRTokens.BOS_N] + linearized.split(' ')
 
     def tokenize_amr(self, graph):
-        if self.raw_graph:
-            graph_ = copy.deepcopy(graph)
-            graph_.metadata = {}
-            linearized = penman.encode(graph_)
-            linearized = re.sub(r"\s+", ' ', linearized)
-            bpe_tokens = [self.bos_token] + self._tokenize(linearized)[:1022]
-            bpe_token_ids = [self.encoder.get(b, self.unk_token_id) for b in bpe_tokens]
-            bpe_backreferences = list(range(len(bpe_token_ids)))
-            return bpe_tokens, bpe_token_ids, bpe_backreferences
-        else:
+        if not self.raw_graph:
             return super().tokenize_amr(graph)
+        graph_ = copy.deepcopy(graph)
+        graph_.metadata = {}
+        linearized = penman.encode(graph_)
+        linearized = re.sub(r"\s+", ' ', linearized)
+        bpe_tokens = [self.bos_token] + self._tokenize(linearized)[:1022]
+        bpe_token_ids = [self.encoder.get(b, self.unk_token_id) for b in bpe_tokens]
+        bpe_backreferences = list(range(len(bpe_token_ids)))
+        return bpe_tokens, bpe_token_ids, bpe_backreferences
 
     def _get_nodes_and_backreferences(self, graph):
         graph_ = copy.deepcopy(graph)
@@ -344,10 +349,15 @@ class PENMANBartTokenizer(AMRBartTokenizer):
         elif node in ['/', '(', ')']:
             return node
         elif node[0].isalpha():
-            for char in (',', ':', '/', '(', ')', '.', '!', '?', '\\'):
-                if char in node:
-                    return "CONST"
-            return "INST"
+            return next(
+                (
+                    "CONST"
+                    for char in (',', ':', '/', '(', ')', '.', '!', '?', '\\')
+                    if char in node
+                ),
+                "INST",
+            )
+
         else:
             return 'CONST'
 

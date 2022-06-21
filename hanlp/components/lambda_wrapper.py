@@ -16,8 +16,7 @@ class LambdaComponent(Component):
         self.config['classpath'] = classpath_of(self)
 
     def predict(self, data: Any, **kwargs):
-        unpack = kwargs.pop('_hanlp_unpack', None)
-        if unpack:
+        if unpack := kwargs.pop('_hanlp_unpack', None):
             return self.function(*data, **kwargs)
         return self.function(data, **kwargs)
 

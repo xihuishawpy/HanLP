@@ -159,8 +159,12 @@ class BiaffineDependencyParsing(Task, BiaffineDependencyParser):
         for arcs_per_sent, rels_per_sent, tokens in zip(arcs, rels, batch['token']):
             tokens = tokens[1:]
             sent_len = len(tokens)
-            result = list(zip(arcs_per_sent[:sent_len], [vocab[r] for r in rels_per_sent[:sent_len]]))
-            yield result
+            yield list(
+                zip(
+                    arcs_per_sent[:sent_len],
+                    [vocab[r] for r in rels_per_sent[:sent_len]],
+                )
+            )
 
     def build_samples(self, inputs, cls_is_bos=False, sep_is_eos=False):
         return [{'FORM': token + ([EOS] if sep_is_eos else [])} for token in inputs]

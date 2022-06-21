@@ -46,7 +46,9 @@ class Transform(ABC):
         int
             How many samples in the training set
         """
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     def build_config(self):
         """
@@ -69,7 +71,9 @@ class Transform(ABC):
         """
         Create dataset related values,
         """
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     @abstractmethod
     def file_to_inputs(self, filepath: str, gold=True):
@@ -82,7 +86,9 @@ class Transform(ABC):
         filepath
         gold
         """
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     def inputs_to_samples(self, inputs, gold=False):
         if gold:
@@ -139,8 +145,7 @@ class Transform(ABC):
 
         def generator():
             inputs = self.file_to_inputs(filepath, gold)
-            samples = self.inputs_to_samples(inputs, gold)
-            yield from samples
+            yield from self.inputs_to_samples(inputs, gold)
 
         return self.samples_to_dataset(generator, map_x, map_y, batch_size, shuffle, repeat, drop_remainder, prefetch,
                                        cache)
@@ -153,8 +158,7 @@ class Transform(ABC):
         #     pass
 
         def generator():
-            samples = self.inputs_to_samples(inputs, gold)
-            yield from samples
+            yield from self.inputs_to_samples(inputs, gold)
 
         return self.samples_to_dataset(generator, map_x, map_y, batch_size, shuffle, repeat, drop_remainder, prefetch,
                                        cache)
@@ -208,26 +212,32 @@ class Transform(ABC):
 
     @abstractmethod
     def x_to_idx(self, x) -> Union[tf.Tensor, Tuple]:
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     @abstractmethod
     def y_to_idx(self, y) -> tf.Tensor:
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     def lock_vocabs(self):
-        for key, value in vars(self).items():
+        for value in vars(self).values():
             if isinstance(value, VocabTF):
                 value.lock()
 
     def summarize_vocabs(self, logger=None, header='Vocab summary:'):
         output = header + '\n'
-        vocabs = {}
-        for key, value in vars(self).items():
-            if isinstance(value, VocabTF):
-                vocabs[key] = value
+        vocabs = {
+            key: value
+            for key, value in vars(self).items()
+            if isinstance(value, VocabTF)
+        }
+
         # tag vocab comes last usually
         for key, value in sorted(vocabs.items(), key=lambda kv: len(kv[1]), reverse=True):
-            output += f'{key}' + value.summary(verbose=False) + '\n'
+            output += f'{key}{value.summary(verbose=False)}' + '\n'
         output = output.strip()
         if logger:
             logger.info(output)
@@ -236,7 +246,7 @@ class Transform(ABC):
 
     @staticmethod
     def generator_to_callable(generator: Generator):
-        return lambda: (x for x in generator)
+        return lambda: iter(generator)
 
     def str_to_idx(self, X, Y) -> Tuple[Union[tf.Tensor, Tuple], tf.Tensor]:
         return self.x_to_idx(X), self.y_to_idx(Y)
@@ -264,7 +274,7 @@ class Transform(ABC):
         -------
 
         """
-        return [(x, y) for x, y in zip(self.X_to_inputs(X), self.Y_to_outputs(Y, gold))]
+        return list(zip(self.X_to_inputs(X), self.Y_to_outputs(Y, gold)))
 
     def input_is_single_sample(self, input: Any) -> bool:
         return False

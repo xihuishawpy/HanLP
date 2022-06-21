@@ -38,5 +38,4 @@ class TransformerLemmatizer(TransformerTagger):
             token = batch['token']
         rules = super().prediction_to_human(pred, vocab, batch)
         for token_per_sent, rule_per_sent in zip(token, rules):
-            lemma_per_sent = [apply_lemma_rule(t, r) for t, r in zip(token_per_sent, rule_per_sent)]
-            yield lemma_per_sent
+            yield [apply_lemma_rule(t, r) for t, r in zip(token_per_sent, rule_per_sent)]

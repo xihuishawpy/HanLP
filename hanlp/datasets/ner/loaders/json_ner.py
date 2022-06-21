@@ -147,7 +147,7 @@ def prune_ner_tagset(sample: dict, tagset: Union[set, Dict[str, str]]):
                 role, ner_type = cells
                 if ner_type in tagset:
                     if isinstance(tagset, dict):
-                        tag = role + '-' + tagset[ner_type]
+                        tag = f'{role}-{tagset[ner_type]}'
                 else:
                     tag = 'O'
             pruned_tag.append(tag)

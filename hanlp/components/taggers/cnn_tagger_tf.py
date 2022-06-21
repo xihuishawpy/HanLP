@@ -33,19 +33,16 @@ class WindowTokenTransform(TSVTaggingTransform):
     def inputs_to_samples(self, inputs, gold=False):
         window_radius = self.config.window_radius
         for t in inputs:
-            if gold:
-                words, tags = t
-            else:
-                words, tags = t, [self.padding_values[-1]] * len(t)
+            words, tags = t if gold else (t, [self.padding_values[-1]] * len(t))
             ngrams = []
             for i, word in enumerate(words):
                 features = []
                 for t in range(-window_radius, window_radius + 1):
                     index = i + t
                     if index < 0:
-                        feature = 'bos{}'.format(index)
+                        feature = f'bos{index}'
                     elif index >= len(words):
-                        feature = 'eos+{}'.format(index - len(words) + 1)
+                        feature = f'eos+{index - len(words) + 1}'
                     else:
                         feature = words[index]
                     features.append(feature)
@@ -54,10 +51,7 @@ class WindowTokenTransform(TSVTaggingTransform):
 
     def X_to_inputs(self, X: Union[tf.Tensor, Tuple[tf.Tensor]]) -> Iterable:
         for xs in X:
-            words = []
-            for x in xs:
-                words.append(self.word_vocab.idx_to_token[int(x[len(x) // 2])])
-            yield words
+            yield [self.word_vocab.idx_to_token[int(x[len(x) // 2])] for x in xs]
 
 
 class CNNTaggingModel(tf.keras.models.Model):
@@ -65,10 +59,16 @@ class CNNTaggingModel(tf.keras.models.Model):
         super().__init__()
         self.embed = embed
         self.embed_dropout = tf.keras.layers.Dropout(rate=dropout)
-        self.conv2d = []
-        for k in kernels:
-            self.conv2d.append(
-                tf.keras.layers.Conv2D(filters=filters, kernel_size=k, data_format='channels_last', padding='same'))
+        self.conv2d = [
+            tf.keras.layers.Conv2D(
+                filters=filters,
+                kernel_size=k,
+                data_format='channels_last',
+                padding='same',
+            )
+            for k in kernels
+        ]
+
         self.conv2d_dropout = tf.keras.layers.Dropout(rate=dropout)
         self.concat = tf.keras.layers.Concatenate()
         self.dense = tf.keras.layers.Dense(units=num_tags)
@@ -102,11 +102,10 @@ class CNNTaggerTF(TaggerComponent, ABC):
     def build_model(self, embedding, **kwargs) -> tf.keras.Model:
         embed = build_embedding(embedding, self.transform.word_vocab, self.transform)
         self.transform.map_x = embed.dtype != tf.string
-        model = CNNTaggingModel(num_tags=len(self.transform.tag_vocab),
-                                embed=embed,
-                                **kwargs)
         # model.build((None, None, 3))
-        return model
+        return CNNTaggingModel(
+            num_tags=len(self.transform.tag_vocab), embed=embed, **kwargs
+        )
 
     # noinspection PyMethodOverriding
     def fit(self, trn_data: Any, dev_data: Any, save_dir: str, embedding=200, window_radius=3,

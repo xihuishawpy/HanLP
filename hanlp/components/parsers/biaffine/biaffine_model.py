@@ -102,13 +102,9 @@ class EncoderWithContextualLayer(nn.Module):
                 embed = torch.cat((trans_embed, feat_embed), dim=-1)
             else:
                 embed = trans_embed
-            if hasattr(self, 'lstm'):
-                x = self.run_rnn(embed, lens, seq_len)
-            else:
-                x = embed
+            x = self.run_rnn(embed, lens, seq_len) if hasattr(self, 'lstm') else embed
             if self.secondary_encoder:
                 x = self.secondary_encoder(x, mask)
-            x = self.hidden_dropout(x)
         else:
             if self.word_dropout:
                 words = self.word_dropout(words)
@@ -137,7 +133,7 @@ class EncoderWithContextualLayer(nn.Module):
                 embed = word_embed
 
             x = self.run_rnn(embed, lens, seq_len)
-            x = self.hidden_dropout(x)
+        x = self.hidden_dropout(x)
         return x, mask
 
     def run_rnn(self, embed, lens, seq_len):

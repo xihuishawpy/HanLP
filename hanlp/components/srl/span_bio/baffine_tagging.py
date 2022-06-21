@@ -39,10 +39,7 @@ class BiaffineTaggingDecoder(nn.Module):
         rel_h = self.mlp_rel_h(x)
         rel_d = self.mlp_rel_d(x)
 
-        # get arc and rel scores from the bilinear attention
-        # [batch_size, seq_len, seq_len, n_rels]
-        s_rel = self.rel_attn(rel_d, rel_h).permute(0, 2, 3, 1)
-        return s_rel
+        return self.rel_attn(rel_d, rel_h).permute(0, 2, 3, 1)
 
 
 class SpanBIOSemanticRoleLabelingModel(nn.Module):

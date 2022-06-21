@@ -37,8 +37,7 @@ class NgramTransform(TSVTaggingTransform):
 
     def x_to_idx(self, x) -> Union[tf.Tensor, Tuple]:
         ids = [self.word_vocab.lookup(x[0]) if self.config.map_word_feature else x[0]]
-        for ngram in x[1:]:
-            ids.append(self.ngram_vocab.lookup(ngram))
+        ids.extend(self.ngram_vocab.lookup(ngram) for ngram in x[1:])
         return tuple(ids)
 
     def y_to_idx(self, y) -> tf.Tensor:
@@ -51,9 +50,15 @@ class NgramTransform(TSVTaggingTransform):
         shapes = tuple([[None]] * (vec_dim - 1)), [None]
         types = tuple([tf.string] * (vec_dim - 1)), tf.string
         word_vocab, ngram_vocab, tag_vocab = self.word_vocab, self.ngram_vocab, self.tag_vocab
-        defaults = tuple([word_vocab.pad_token] + [
-            ngram_vocab.pad_token if ngram_vocab else word_vocab.pad_token] * ngram_size), (
-                       tag_vocab.pad_token if tag_vocab.pad_token else tag_vocab.first_token)
+        defaults = (
+            tuple(
+                [word_vocab.pad_token]
+                + [ngram_vocab.pad_token if ngram_vocab else word_vocab.pad_token]
+                * ngram_size
+            ),
+            tag_vocab.pad_token or tag_vocab.first_token,
+        )
+
         return types, shapes, defaults
 
     def fit(self, trn_path: str, **kwargs):
@@ -96,8 +101,7 @@ class NgramConvTaggingModel(tf.keras.models.Model):
         def create_conv1d(filter, name):
             conv = tf.keras.layers.Conv1D(filter, kernel_size, padding="same", name=name)
             if weight_norm:
-                conv_norm = WeightNormalization(conv, name=name + '_norm', data_init=False)
-                return conv_norm
+                return WeightNormalization(conv, name=f'{name}_norm', data_init=False)
             return conv
 
         for idx, filter in enumerate(filters):
@@ -111,12 +115,8 @@ class NgramConvTaggingModel(tf.keras.models.Model):
             chars, ngrams = inputs[0], inputs[1:]
             embeds = [self.word_embed(chars)]
             mask = embeds[0]._keras_mask
-            for ngram in ngrams:
-                embeds.append(self.ngram_embed(ngram))
-            if len(embeds) > 1:
-                embed_input = tf.concat(embeds, axis=2)
-            else:
-                embed_input = embeds[0]
+            embeds.extend(self.ngram_embed(ngram) for ngram in ngrams)
+            embed_input = tf.concat(embeds, axis=2) if len(embeds) > 1 else embeds[0]
         else:
             chars = inputs if isinstance(inputs, tf.Tensor) else inputs[0]
             embed_input = self.word_embed(chars)
@@ -134,8 +134,7 @@ class NgramConvTaggingModel(tf.keras.models.Model):
             hidden_output = self.dropout_hidden(hidden_output)
         # dirty hack
         hidden_output._keras_mask = mask
-        logits = self.dense(hidden_output)
-        return logits
+        return self.dense(hidden_output)
 
 
 class NgramConvTaggerTF(TaggerComponent):
@@ -160,10 +159,16 @@ class NgramConvTaggerTF(TaggerComponent):
             ngram_embed = build_embedding(ngram_embed, ngram_vocab, self.transform)
         else:
             ngram_embed = None
-        model = NgramConvTaggingModel(word_embed, ngram_embed, filters, kernel_size, dropout_embed, dropout_hidden,
-                                      weight_norm, len(tag_vocab))
-
-        return model
+        return NgramConvTaggingModel(
+            word_embed,
+            ngram_embed,
+            filters,
+            kernel_size,
+            dropout_embed,
+            dropout_hidden,
+            weight_norm,
+            len(tag_vocab),
+        )
 
     def fit(self, trn_data: Any, dev_data: Any, save_dir: str, word_embed: Union[str, int, dict] = 200,
             ngram_embed: Union[str, int,dict] = 50, embedding_trainable=True, window_size=4, kernel_size=3,

@@ -84,10 +84,11 @@ class BiaffineSemanticDependencyParser(BiaffineDependencyParser):
         root_rels = Counter()
         for each in dataset:
             if training:
-                num_roots[sum([x[0] for x in each['arc']])] += 1
-                no_zero_head &= all([x != '_' for x in each['DEPS']])
-                head_is_root = [i for i in range(len(each['arc'])) if each['arc'][i][0]]
-                if head_is_root:
+                num_roots[sum(x[0] for x in each['arc'])] += 1
+                no_zero_head &= all(x != '_' for x in each['DEPS'])
+                if head_is_root := [
+                    i for i in range(len(each['arc'])) if each['arc'][i][0]
+                ]:
                     for i in head_is_root:
                         root_rels[each['rel'][i][0]] += 1
             timer.log('Preprocessing and caching samples [blink][yellow]...[/yellow][/blink]')
@@ -138,10 +139,7 @@ class BiaffineSemanticDependencyParser(BiaffineDependencyParser):
         for d, (arcs, rels, masks) in zip(data, predictions):
             sent = CoNLLSentence()
             for idx, (cell, a, r) in enumerate(zip(d, arcs[1:], rels[1:])):
-                if use_pos:
-                    token, pos = cell
-                else:
-                    token, pos = cell, None
+                token, pos = cell if use_pos else (cell, None)
                 heads = [i for i in range(len(d) + 1) if a[i]]
                 deprels = [self.vocabs['rel'][r[i]] for i in range(len(d) + 1) if a[i]]
                 sent.append(

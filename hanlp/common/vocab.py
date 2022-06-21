@@ -23,9 +23,9 @@ class Vocab(Serializable):
         """
         super().__init__()
         if idx_to_token:
-            t2i = dict((token, idx) for idx, token in enumerate(idx_to_token))
+            t2i = {token: idx for idx, token in enumerate(idx_to_token)}
             if token_to_idx:
-                t2i.update(token_to_idx)
+                t2i |= token_to_idx
             token_to_idx = t2i
         if token_to_idx is None:
             token_to_idx = {}
@@ -231,31 +231,25 @@ class Vocab(Serializable):
             Summary in text form.
 
         """
-        # report = 'Length: {}\n'.format(len(self))
-        # report += 'Samples: {}\n'.format(str(list(self.token_to_idx.keys())[:min(50, len(self))]))
-        # report += 'Mutable: {}'.format(self.mutable)
-        # report = report.strip()
-        report = '[{}] = '.format(len(self))
-        report += str(list(self.token_to_idx.keys())[:min(50, len(self))])
+        report = f'[{len(self)}] = ' + str(
+            list(self.token_to_idx.keys())[: min(50, len(self))]
+        )
+
         if verbose:
             print(report)
         return report
 
     def __call__(self, some_token: Union[str, Iterable[str]]) -> Union[int, List[int]]:
-        if isinstance(some_token, (list, tuple, set)):
-            indices = []
-            if len(some_token) and isinstance(some_token[0], (list, tuple, set)):
-                for sent in some_token:
-                    inside = []
-                    for token in sent:
-                        inside.append(self.get_idx(token))
-                    indices.append(inside)
-                return indices
-            for token in some_token:
-                indices.append(self.get_idx(token))
-            return indices
-        else:
+        if not isinstance(some_token, (list, tuple, set)):
             return self.get_idx(some_token)
+        indices = []
+        if len(some_token) and isinstance(some_token[0], (list, tuple, set)):
+            for sent in some_token:
+                inside = [self.get_idx(token) for token in sent]
+                indices.append(inside)
+            return indices
+        indices.extend(self.get_idx(token) for token in some_token)
+        return indices
 
     def to_dict(self) -> dict:
         """Convert this vocab to a dict so that it can be json serialized.
@@ -360,7 +354,7 @@ class Vocab(Serializable):
 
     def reload_idx_to_token(self, idx_to_token: List[str], pad_idx=0, unk_idx=1):
         self.idx_to_token = idx_to_token
-        self.token_to_idx = dict((s, i) for i, s in enumerate(idx_to_token))
+        self.token_to_idx = {s: i for i, s in enumerate(idx_to_token)}
         if pad_idx is not None:
             self.pad_token = idx_to_token[pad_idx]
         if unk_idx is not None:
@@ -399,9 +393,7 @@ class LowercaseVocab(CustomVocab):
 
 class VocabWithNone(CustomVocab):
     def get_idx(self, token: str) -> int:
-        if token is None:
-            return -1
-        return super().get_idx(token)
+        return -1 if token is None else super().get_idx(token)
 
 
 class VocabWithFrequency(CustomVocab):
@@ -451,11 +443,15 @@ class VocabCounter(CustomVocab):
     def trim(self, min_frequency):
         assert self.mutable
         specials = {self.unk_token, self.pad_token}
-        survivors = list((token, freq) for token, freq in self.counter.most_common()
-                         if freq >= min_frequency and token not in specials)
+        survivors = [
+            (token, freq)
+            for token, freq in self.counter.most_common()
+            if freq >= min_frequency and token not in specials
+        ]
+
         survivors = [(x, -1) for x in specials if x] + survivors
         self.counter = Counter(dict(survivors))
-        self.token_to_idx = dict()
+        self.token_to_idx = {}
         self.idx_to_token = None
         for token, freq in survivors:
             idx = len(self.token_to_idx)
@@ -472,8 +468,7 @@ class VocabCounter(CustomVocab):
 
 
 class Vocab3D(CustomVocab):
-    def __call__(self, some_token: Union[str, Iterable[str], Iterable[Iterable[str]]]) \
-            -> Union[int, List[int], List[List[int]]]:
+    def __call__(self, some_token: Union[str, Iterable[str], Iterable[Iterable[str]]]) -> Union[int, List[int], List[List[int]]]:
         """It supports 3D arrays of tokens.
 
         Args:
@@ -483,23 +478,20 @@ class Vocab3D(CustomVocab):
             A list of indices.
 
         """
-        if isinstance(some_token, (list, tuple, set)):
-            indices = []
-            if len(some_token) and isinstance(some_token[0], (list, tuple, set)):
-                for sent in some_token:
-                    inside = []
-                    for token in sent:
-                        inside.append(self.get_idx(token))
-                    indices.append(inside)
-                return indices
-            for token in some_token:
-                if isinstance(token, str):
-                    indices.append(self.get_idx(token))
-                else:
-                    indices.append([self.get_idx(x) for x in token])
-            return indices
-        else:
+        if not isinstance(some_token, (list, tuple, set)):
             return self.get_idx(some_token)
+        indices = []
+        if len(some_token) and isinstance(some_token[0], (list, tuple, set)):
+            for sent in some_token:
+                inside = [self.get_idx(token) for token in sent]
+                indices.append(inside)
+            return indices
+        for token in some_token:
+            if isinstance(token, str):
+                indices.append(self.get_idx(token))
+            else:
+                indices.append([self.get_idx(x) for x in token])
+        return indices
 
 
 def create_label_vocab() -> Vocab:

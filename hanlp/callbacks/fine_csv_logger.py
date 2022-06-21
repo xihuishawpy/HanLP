@@ -19,10 +19,13 @@ class StreamTableFormatter(object):
         if not isinstance(cells, list):
             cells = list(cells)
         if not self.col_widths:
-            self.col_widths = [0] * len([_ for _ in cells])
+            self.col_widths = [0] * len(list(cells))
         for i, c in enumerate(cells):
             self.col_widths[i] = max(self.col_widths[i], len(self.format_cell(c, self.col_widths[i])))
-        return list(self.format_cell(cell, width) for cell, width in zip(cells, self.col_widths))
+        return [
+            self.format_cell(cell, width)
+            for cell, width in zip(cells, self.col_widths)
+        ]
 
     def format_cell(self, cell: str, min_width) -> str:
         if isinstance(cell, (np.float32, np.float)):

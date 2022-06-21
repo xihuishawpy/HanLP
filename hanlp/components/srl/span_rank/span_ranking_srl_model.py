@@ -118,18 +118,17 @@ class SpanRankingSRLDecoder(nn.Module):
         
         """
         assert exclusive is True
-        if exclusive is True:
-            exclusive_sent_lengths = input.new_zeros(1, dtype=torch.long)
-            result = torch.cumsum(torch.cat([exclusive_sent_lengths, input], 0)[:-1], 0).view(-1, 1)
-        else:
-            result = torch.cumsum(input, 0).view(-1, 1)
-        return result
+        if exclusive is not True:
+            return torch.cumsum(input, 0).view(-1, 1)
+        exclusive_sent_lengths = input.new_zeros(1, dtype=torch.long)
+        return torch.cumsum(
+            torch.cat([exclusive_sent_lengths, input], 0)[:-1], 0
+        ).view(-1, 1)
 
     def flatten_emb(self, emb):
         num_sentences, max_sentence_length = emb.size()[0], emb.size()[1]
         assert len(emb.size()) == 3
-        flatted_emb = emb.contiguous().view(num_sentences * max_sentence_length, -1)
-        return flatted_emb
+        return emb.contiguous().view(num_sentences * max_sentence_length, -1)
 
     def flatten_emb_in_sentence(self, emb, batch_sentences_mask):
         num_sentences, max_sentence_length = emb.size()[0], emb.size()[1]
@@ -194,16 +193,14 @@ class SpanRankingSRLDecoder(nn.Module):
         for i, ffnn in enumerate(self.arg_unary_score_layers):
             input = F.relu(ffnn.forward(input))
             input = self.arg_dropout_layers[i].forward(input)
-        output = self.arg_unary_score_projection.forward(input)
-        return output
+        return self.arg_unary_score_projection.forward(input)
 
     def get_pred_unary_scores(self, span_emb):
         input = span_emb
         for i, ffnn in enumerate(self.pred_unary_score_layers):
             input = F.relu(ffnn.forward(input))
             input = self.pred_dropout_layers[i].forward(input)
-        output = self.pred_unary_score_projection.forward(input)
-        return output
+        return self.pred_unary_score_projection.forward(input)
 
     def extract_spans(self, candidate_scores, candidate_starts, candidate_ends, topk, max_sentence_length,
                       sort_spans, enforce_non_crossing):
@@ -271,18 +268,17 @@ class SpanRankingSRLDecoder(nn.Module):
             sparse_indices = torch.cat([sparse_indices, span_parents.unsqueeze(2)], 2)
 
         rank = 3 if span_parents is None else 4
-        dense_labels = torch.sparse.LongTensor(sparse_indices.view(num_sentences * max_spans_num, rank).t(),
-                                               span_labels.view(-1),
-                                               torch.Size([num_sentences] + [max_sentence_length] * (rank - 1))) \
-            .to_dense()
-        return dense_labels
+        return torch.sparse.LongTensor(
+            sparse_indices.view(num_sentences * max_spans_num, rank).t(),
+            span_labels.view(-1),
+            torch.Size([num_sentences] + [max_sentence_length] * (rank - 1)),
+        ).to_dense()
 
     @staticmethod
     def gather_4d(params, indices):
         assert len(params.size()) == 4 and len(indices) == 4
         indices_a, indices_b, indices_c, indices_d = indices
-        result = params[indices_a, indices_b, indices_c, indices_d]
-        return result
+        return params[indices_a, indices_b, indices_c, indices_d]
 
     def get_srl_labels(self,
                        arg_starts,
@@ -308,17 +304,22 @@ class SpanRankingSRLDecoder(nn.Module):
                                                       gold_arg_ends,
                                                       gold_arg_labels,
                                                       max_sentence_length, span_parents=gold_predicates)  # ans
-        srl_labels = self.gather_4d(dense_srl_labels,
-                                    [sentence_indices_2d, expanded_arg_starts, expanded_arg_ends, expanded_predicates])
-        return srl_labels
+        return self.gather_4d(
+            dense_srl_labels,
+            [
+                sentence_indices_2d,
+                expanded_arg_starts,
+                expanded_arg_ends,
+                expanded_predicates,
+            ],
+        )
 
     def get_srl_unary_scores(self, span_emb):
         input = span_emb
         for i, ffnn in enumerate(self.srl_unary_score_layers):
             input = F.relu(ffnn.forward(input))
             input = self.srl_dropout_layers[i].forward(input)
-        output = self.srl_unary_score_projection.forward(input)
-        return output
+        return self.srl_unary_score_projection.forward(input)
 
     def get_srl_scores(self, arg_emb, pred_emb, arg_scores, pred_scores, num_labels, config, dropout):
         num_sentences = arg_emb.size()[0]
@@ -358,8 +359,7 @@ class SpanRankingSRLDecoder(nn.Module):
         # num_predicted_args, 1D tensor; max_num_arg: a int variable means the gold ans's max arg number
         args_mask = hanlp.utils.torch_util.lengths_to_mask(num_predicted_args, max_num_arg)
         pred_mask = hanlp.utils.torch_util.lengths_to_mask(num_predicted_preds, max_num_pred)
-        srl_loss_mask = args_mask.unsqueeze(2) & pred_mask.unsqueeze(1)
-        return srl_loss_mask
+        return args_mask.unsqueeze(2) & pred_mask.unsqueeze(1)
 
     def decode(self, contextualized_embeddings, sent_lengths, masks, gold_arg_starts, gold_arg_ends, gold_arg_labels,
                gold_predicates):

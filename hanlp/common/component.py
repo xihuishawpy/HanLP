@@ -20,7 +20,9 @@ class Component(Configurable, ABC):
         Returns: Any predicted annotations.
 
         """
-        raise NotImplementedError('%s.%s()' % (self.__class__.__name__, inspect.stack()[0][3]))
+        raise NotImplementedError(
+            f'{self.__class__.__name__}.{inspect.stack()[0][3]}()'
+        )
 
     def __call__(self, *args, **kwargs):
         """

@@ -18,17 +18,17 @@ def min_edit_script(source, target, allow_copy=False):
 
     """
     a = [[(len(source) + len(target) + 1, None)] * (len(target) + 1) for _ in range(len(source) + 1)]
-    for i in range(0, len(source) + 1):
-        for j in range(0, len(target) + 1):
+    for i in range(len(source) + 1):
+        for j in range(len(target) + 1):
             if i == 0 and j == 0:
                 a[i][j] = (0, "")
             else:
                 if allow_copy and i and j and source[i - 1] == target[j - 1] and a[i - 1][j - 1][0] < a[i][j][0]:
-                    a[i][j] = (a[i - 1][j - 1][0], a[i - 1][j - 1][1] + "→")
+                    a[i][j] = a[i - 1][j - 1][0], f"{a[i - 1][j - 1][1]}→"
                 if i and a[i - 1][j][0] < a[i][j][0]:
-                    a[i][j] = (a[i - 1][j][0] + 1, a[i - 1][j][1] + "-")
+                    a[i][j] = a[i - 1][j][0] + 1, f"{a[i - 1][j][1]}-"
                 if j and a[i][j - 1][0] < a[i][j][0]:
-                    a[i][j] = (a[i][j - 1][0] + 1, a[i][j - 1][1] + "+" + target[j - 1])
+                    a[i][j] = a[i][j - 1][0] + 1, f"{a[i][j - 1][1]}+{target[j - 1]}"
     return a[-1][-1][1]
 
 
@@ -50,8 +50,8 @@ def gen_lemma_rule(form, lemma, allow_copy=False):
     for i, c in enumerate(lemma):
         case = "↑" if c.lower() != c else "↓"
         if case != previous_case:
-            lemma_casing += "{}{}{}".format("¦" if lemma_casing else "", case,
-                                            i if i <= len(lemma) // 2 else i - len(lemma))
+            lemma_casing += f'{"¦" if lemma_casing else ""}{case}{i if i <= len(lemma) // 2 else i - len(lemma)}'
+
         previous_case = case
     lemma = lemma.lower()
 
@@ -65,14 +65,13 @@ def gen_lemma_rule(form, lemma, allow_copy=False):
                 best_form = f
                 best_lemma = l
 
-    rule = lemma_casing + ";"
-    if not best:
-        rule += "a" + lemma
-    else:
-        rule += "d{}¦{}".format(
-            min_edit_script(form[:best_form], lemma[:best_lemma], allow_copy),
-            min_edit_script(form[best_form + best:], lemma[best_lemma + best:], allow_copy),
-        )
+    rule = f"{lemma_casing};"
+    rule += (
+        f"d{min_edit_script(form[:best_form], lemma[:best_lemma], allow_copy)}¦{min_edit_script(form[best_form + best:], lemma[best_lemma + best:], allow_copy)}"
+        if best
+        else f"a{lemma}"
+    )
+
     return rule
 
 
@@ -99,7 +98,7 @@ def apply_lemma_rule(form, lemma_rule):
         for rule in rules:
             source, i = 0, 0
             while i < len(rule):
-                if rule[i] == "→" or rule[i] == "-":
+                if rule[i] in ["→", "-"]:
                     source += 1
                 else:
                     assert rule[i] == "+"

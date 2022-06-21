@@ -50,10 +50,7 @@ class LanguageModelDataset(TransformSequentialDataset):
         self.num_tokens = None
         self.load_file(data)
         self._fp = None
-        if isinstance(seq_len, int):
-            self.seq_len = lambda: seq_len
-        else:
-            self.seq_len = seq_len
+        self.seq_len = (lambda: seq_len) if isinstance(seq_len, int) else seq_len
 
     @property
     def vocab(self):
@@ -61,7 +58,7 @@ class LanguageModelDataset(TransformSequentialDataset):
 
     @property
     def vocab_path(self):
-        return os.path.splitext(self.data)[0] + '.vocab.json'
+        return f'{os.path.splitext(self.data)[0]}.vocab.json'
 
     def load_file(self, filepath):
         cache, valid = file_cache(filepath, not self.cache)
@@ -101,9 +98,11 @@ class LanguageModelDataset(TransformSequentialDataset):
             while i < max_seq_len - safety:
                 seq_len = self.seq_len()
                 seq_len = min(seq_len, max_seq_len - 1 - i)
-                data = []
-                for j in range(batch_size):
-                    data.append(self._read_chunk(fp, max_seq_len * j + i, seq_len + 1))
+                data = [
+                    self._read_chunk(fp, max_seq_len * j + i, seq_len + 1)
+                    for j in range(batch_size)
+                ]
+
                 data = torch.LongTensor(data)
                 data.transpose_(0, 1)
                 data, targets = data[:seq_len, :], data[1:, :]
@@ -117,14 +116,13 @@ class LanguageModelDataset(TransformSequentialDataset):
 
     @property
     def max_seq_len(self):
-        max_seq_len = self.num_tokens // self.batch_size
-        return max_seq_len
+        return self.num_tokens // self.batch_size
 
     @staticmethod
     def _read_chunk(fp, offset, length):
         data = []
         fp.seek(offset * 4)
-        for i in range(length):
+        for _ in range(length):
             id = int.from_bytes(fp.read(4), 'little')
             data.append(id)
         return data
@@ -132,7 +130,7 @@ class LanguageModelDataset(TransformSequentialDataset):
     def _debug_load_cache(self):
         with open(self.filecache, 'rb') as src:
             ids = []
-            for i in range(self.num_tokens):
+            for _ in range(self.num_tokens):
                 id = int.from_bytes(src.read(4), 'little')
                 ids.append(id)
             return torch.LongTensor(ids)

@@ -20,8 +20,7 @@ class ConstituencyDataset(TransformableDataset):
 
 
 def unpack_tree_to_features(sample: dict):
-    tree = sample.get('constituency', None)
-    if tree:
+    if tree := sample.get('constituency', None):
         words, tags = zip(*tree.pos())
         chart = [[None] * (len(words) + 1) for _ in range(len(words) + 1)]
         for i, j, label in factorize(binarize(tree)[0]):
@@ -91,7 +90,7 @@ def binarize(tree: Tree):
     while nodes:
         node = nodes.pop()
         if isinstance(node, Tree):
-            nodes.extend([child for child in node])
+            nodes.extend(list(node))
             if len(node) > 1:
                 for i, child in enumerate(node):
                     if not isinstance(child[0], Tree):
@@ -196,10 +195,7 @@ def build_tree(tokens: List[str], sequence):
 
     def track(node):
         i, j, label = next(node)
-        if j == i + 1:
-            children = [leaves[i]]
-        else:
-            children = track(node) + track(node)
+        children = [leaves[i]] if j == i + 1 else track(node) + track(node)
         if label.endswith('|<>'):
             return children
         labels = label.split('+')

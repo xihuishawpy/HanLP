@@ -25,11 +25,11 @@ def split_example_for_eval(example):
     num_words = sum(len(s) for s in sentences)
     word_offset = 0
     samples = []
+    ner_spans = []  # Unused.
     # assert len(sentences) == 1
     for i, sentence in enumerate(sentences):
         # assert i == 0  # For CoNLL-2005, there are always document == sentence.
         srl_rels = {}
-        ner_spans = []  # Unused.
         for r in example["srl"][i]:
             pred_id = r[0] - word_offset
             if pred_id not in srl_rels:
@@ -76,16 +76,12 @@ def evaluate_retrieval(span_starts, span_ends, span_scores, pred_starts, pred_en
                 if debugging:
                     print("Predicted", list(zip(sorted_starts, sorted_ends, sorted_scores))[:len(gold_spans)])
                     print("Gold", gold_spans)
-            # FIXME: scalar index error
             elif k == 0:
                 is_predicted = span_scores > 0
                 predicted_starts = span_starts[is_predicted]
                 predicted_ends = span_ends[is_predicted]
             else:
-                if k == -1:
-                    num_predictions = len(gold_spans)
-                else:
-                    num_predictions = (k * text_length) / 100
+                num_predictions = len(gold_spans) if k == -1 else (k * text_length) / 100
                 predicted_starts = sorted_starts[:num_predictions]
                 predicted_ends = sorted_ends[:num_predictions]
             predicted_spans = set(zip(predicted_starts, predicted_ends))
@@ -122,8 +118,13 @@ def compute_span_f1(gold_data, predictions, task_name):
                     if a0[2] == a1[2]:
                         total_matched += 1
     prec, recall, f1 = _calc_f1(total_gold, total_predicted, total_matched, task_name)
-    ul_prec, ul_recall, ul_f1 = _calc_f1(total_gold, total_predicted, total_unlabeled_matched,
-                                         "Unlabeled " + task_name)
+    ul_prec, ul_recall, ul_f1 = _calc_f1(
+        total_gold,
+        total_predicted,
+        total_unlabeled_matched,
+        f"Unlabeled {task_name}",
+    )
+
     return prec, recall, f1, ul_prec, ul_recall, ul_f1, label_confusions
 
 
@@ -148,8 +149,13 @@ def compute_unlabeled_span_f1(gold_data, predictions, task_name):
                     if a0[2] == a1[2]:
                         total_matched += 1
     prec, recall, f1 = _calc_f1(total_gold, total_predicted, total_matched, task_name)
-    ul_prec, ul_recall, ul_f1 = _calc_f1(total_gold, total_predicted, total_unlabeled_matched,
-                                         "Unlabeled " + task_name)
+    ul_prec, ul_recall, ul_f1 = _calc_f1(
+        total_gold,
+        total_predicted,
+        total_unlabeled_matched,
+        f"Unlabeled {task_name}",
+    )
+
     return prec, recall, f1, ul_prec, ul_recall, ul_f1, label_confusions
 
 
@@ -249,12 +255,11 @@ def read_gold_predicates(gold_path):
     fin = codecs.open(gold_path, "r", "utf-8")
     gold_predicates = [[], ]
     for line in fin:
-        line = line.strip()
-        if not line:
-            gold_predicates.append([])
-        else:
+        if line := line.strip():
             info = line.split()
             gold_predicates[-1].append(info[0])
+        else:
+            gold_predicates.append([])
     fin.close()
     return gold_predicates
 
@@ -272,12 +277,12 @@ def print_to_conll(sentences, srl_labels, output_filename, gold_predicates=None)
             if gold_predicates and gold_predicates[sent_id][pred_id] != "-":
                 props[pred_id] = gold_predicates[sent_id][pred_id]
             else:
-                props[pred_id] = "P" + words[pred_id]
+                props[pred_id] = f"P{words[pred_id]}"
             flags = [False for _ in words]
             for start, end, label in pred_to_args[pred_id]:
                 if not max(flags[start:end + 1]):
-                    col_labels[i][start] = "(" + label + col_labels[i][start]
-                    col_labels[i][end] = col_labels[i][end] + ")"
+                    col_labels[i][start] = f"({label}{col_labels[i][start]}"
+                    col_labels[i][end] = f"{col_labels[i][end]})"
                     for j in range(start, end + 1):
                         flags[j] = True
             # Add unpredicted verb (for predicted SRL).

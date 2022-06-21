@@ -118,8 +118,18 @@ class TaggingNamedEntityRecognition(Task, TransformerNamedEntityRecognizer):
                          cache=False,
                          gradient_accumulation=1,
                          **kwargs) -> DataLoader:
-        args = dict((k, self.config[k]) for k in
-                    ['delimiter', 'max_seq_len', 'sent_delimiter', 'char_level', 'hard_constraint'] if k in self.config)
+        args = {
+            k: self.config[k]
+            for k in [
+                'delimiter',
+                'max_seq_len',
+                'sent_delimiter',
+                'char_level',
+                'hard_constraint',
+            ]
+            if k in self.config
+        }
+
         dataset = self.build_dataset(data, cache=cache, transform=transform, **args)
         dataset.append_transform(self.vocabs)
         dataset.purge_cache()

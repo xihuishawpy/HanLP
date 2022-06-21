@@ -30,15 +30,13 @@ class Tagger(DistillableComponent, ABC):
             return torch.optim.SGD(self.model.parameters(), lr=lr)
 
     def build_criterion(self, model=None, reduction='mean', decoder=None, **kwargs):
-        if self.config.get('crf', False):
-            if not model:
-                model = decoder or self.model
-            if isinstance(model, nn.DataParallel):
-                raise ValueError('DataParallel not supported when CRF is used')
-                return self.model_from_config.module.crf
-            return model.crf
-        else:
+        if not self.config.get('crf', False):
             return nn.CrossEntropyLoss(reduction=reduction)
+        if not model:
+            model = decoder or self.model
+        if isinstance(model, nn.DataParallel):
+            raise ValueError('DataParallel not supported when CRF is used')
+        return model.crf
 
     def build_metric(self, **kwargs):
         return CategoricalAccuracy()
@@ -48,12 +46,10 @@ class Tagger(DistillableComponent, ABC):
         pass
 
     def compute_loss(self, criterion, out, y, mask):
-        if self.config.get('crf', False):
-            criterion: CRF = criterion
-            loss = -criterion.forward(out, y, mask)
-        else:
-            loss = criterion(out[mask], y[mask])
-        return loss
+        if not self.config.get('crf', False):
+            return criterion(out[mask], y[mask])
+        criterion: CRF = criterion
+        return -criterion.forward(out, y, mask)
 
     def decode_output(self, logits, mask, batch, model=None):
         if self.config.get('crf', False):
@@ -218,7 +214,7 @@ class Tagger(DistillableComponent, ABC):
                   dictionary: Union[DictInterface, Union[Dict[Union[str, Sequence[str]], Union[str, Sequence[str]]]]]):
         if dictionary is not None and not isinstance(dictionary, DictInterface):
             assert isinstance(dictionary, dict), f'Expected dictionary to be `dict` but got {type(dictionary)}.'
-            _d = dict()
+            _d = {}
             for k, v in dictionary.items():
                 if isinstance(k, str):
                     k = (k,)

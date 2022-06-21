@@ -85,8 +85,7 @@ class NgramSentenceBoundaryDetector(TorchComponent):
         super().__init__(**kwargs)
 
     def build_optimizer(self, **kwargs):
-        optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
-        return optimizer
+        return optim.Adam(self.model.parameters(), lr=self.config.lr)
 
     def build_criterion(self, **kwargs):
         return BCEWithLogitsLoss()
@@ -148,8 +147,7 @@ class NgramSentenceBoundaryDetector(TorchComponent):
         return total_loss / timer.total
 
     def compute_loss(self, prediction, batch, criterion):
-        loss = criterion(prediction, batch['label_id'])
-        return loss
+        return criterion(prediction, batch['label_id'])
 
     # noinspection PyMethodOverriding
     def evaluate_dataloader(self,
@@ -176,8 +174,9 @@ class NgramSentenceBoundaryDetector(TorchComponent):
         return total_loss / timer.total, metric
 
     def build_model(self, training=True, **kwargs) -> torch.nn.Module:
-        model = NgramSentenceBoundaryDetectionModel(**self.config, char_vocab_size=len(self.vocabs.char))
-        return model
+        return NgramSentenceBoundaryDetectionModel(
+            **self.config, char_vocab_size=len(self.vocabs.char)
+        )
 
     def build_dataloader(self, data, batch_size, shuffle, device, logger: logging.Logger, **kwargs) -> DataLoader:
         dataset = SentenceBoundaryDetectionDataset(data, **self.config, transform=[self.vocabs])
@@ -271,8 +270,7 @@ class NgramSentenceBoundaryDetector(TorchComponent):
         return super().fit(**merge_locals_kwargs(locals(), kwargs))
 
     def build_vocabs(self, dataset: SentenceBoundaryDetectionDataset, logger, **kwargs):
-        char_min_freq = self.config.char_min_freq
-        if char_min_freq:
+        if char_min_freq := self.config.char_min_freq:
             has_cache = dataset.cache is not None
             char_counter = Counter()
             for each in dataset:
@@ -284,12 +282,8 @@ class NgramSentenceBoundaryDetector(TorchComponent):
                     vocab.add(c)
             if has_cache:
                 dataset.purge_cache()
-                for each in dataset:
-                    pass
         else:
             self.vocabs.char = Vocab()
-            for each in dataset:
-                pass
         self.config.eos_chars = dataset.eos_chars
         self.vocabs.lock()
         self.vocabs.summary(logger)
@@ -307,5 +301,4 @@ class NgramSentenceBoundaryDetector(TorchComponent):
         metrics(nonzero_offsets(prediction > 0), nonzero_offsets(batch['label_id']))
 
     def feed_batch(self, batch):
-        prediction = self.model(batch['char_id'])
-        return prediction
+        return self.model(batch['char_id'])

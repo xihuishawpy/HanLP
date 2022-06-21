@@ -57,12 +57,20 @@ class TransformerTaggerTF(TaggerComponent):
     # noinspection PyMethodOverriding
     def build_optimizer(self, optimizer, learning_rate, epsilon, weight_decay_rate, clipnorm, use_amp, train_steps,
                         warmup_steps, **kwargs):
-        if optimizer == 'adamw':
-            opt = build_adamw_optimizer(self.config, learning_rate, epsilon, clipnorm, train_steps, use_amp,
-                                        warmup_steps, weight_decay_rate)
-        else:
-            opt = super().build_optimizer(optimizer)
-        return opt
+        return (
+            build_adamw_optimizer(
+                self.config,
+                learning_rate,
+                epsilon,
+                clipnorm,
+                train_steps,
+                use_amp,
+                warmup_steps,
+                weight_decay_rate,
+            )
+            if optimizer == 'adamw'
+            else super().build_optimizer(optimizer)
+        )
 
     def build_vocab(self, trn_data, logger):
         train_examples = super().build_vocab(trn_data, logger)
@@ -72,20 +80,24 @@ class TransformerTaggerTF(TaggerComponent):
 
     def train_loop(self, trn_data, dev_data, epochs, num_examples, train_steps_per_epoch, dev_steps, model, optimizer,
                    loss, metrics, callbacks, logger, **kwargs):
-        history = self.model.fit(trn_data, epochs=epochs, steps_per_epoch=train_steps_per_epoch,
-                                 validation_data=dev_data,
-                                 callbacks=callbacks,
-                                 validation_steps=dev_steps,
-                                 # mask out padding labels
-                                 # class_weight=dict(
-                                 #     (i, 0 if i == 0 else 1) for i in range(len(self.transform.tag_vocab)))
-                                 )  # type:tf.keras.callbacks.History
-        return history
+        return self.model.fit(
+            trn_data,
+            epochs=epochs,
+            steps_per_epoch=train_steps_per_epoch,
+            validation_data=dev_data,
+            callbacks=callbacks,
+            validation_steps=dev_steps,
+            # mask out padding labels
+            # class_weight=dict(
+            #     (i, 0 if i == 0 else 1) for i in range(len(self.transform.tag_vocab)))
+        )
 
     def build_loss(self, loss, **kwargs):
-        if not loss:
-            return SparseCategoricalCrossentropyOverBatchFirstDim()
-        return super().build_loss(loss, **kwargs)
+        return (
+            super().build_loss(loss, **kwargs)
+            if loss
+            else SparseCategoricalCrossentropyOverBatchFirstDim()
+        )
 
     def load_transform(self, save_dir) -> Transform:
         super().load_transform(save_dir)

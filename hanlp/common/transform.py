@@ -81,9 +81,7 @@ class VocabList(list):
                 item = FieldToIndex(src=item[0], dst=item[1], vocab=item[2])
             else:
                 raise ValueError(f'Unsupported argument length: {item}')
-        elif isinstance(item, FieldToIndex):
-            pass
-        else:
+        elif not isinstance(item, FieldToIndex):
             raise ValueError(f'Unsupported argument type: {item}')
         super(self).append(item)
 
@@ -148,10 +146,7 @@ class VocabDict(SerializableDict):
         for key, value in vocabs.items():
             if 'idx_to_token' in value:
                 cls = value.get('type', None)
-                if cls:
-                    cls = str_to_type(cls)
-                else:
-                    cls = vocab_cls
+                cls = str_to_type(cls) if cls else vocab_cls
                 vocab = cls()
                 vocab.copy_from(value)
                 vd[key] = vocab
@@ -171,20 +166,18 @@ class VocabDict(SerializableDict):
     @property
     def mutable(self):
         status = [v.mutable for v in self.values() if isinstance(v, Vocab)]
-        return len(status) == 0 or any(status)
+        return not status or any(status)
 
     def __call__(self, sample: dict):
         for key, value in self.items():
             if isinstance(value, Vocab):
-                field = sample.get(key, None)
+                field = sample.get(key)
                 if field is not None:
                     sample[f'{key}_id'] = value(field)
         return sample
 
     def __getattr__(self, key):
-        if key.startswith('__'):
-            return dict.__getattr__(key)
-        return self.__getitem__(key)
+        return dict.__getattr__(key) if key.startswith('__') else self.__getitem__(key)
 
     def __setattr__(self, key, value):
         return self.__setitem__(key, value)
@@ -250,7 +243,7 @@ class ConfigurableTransform(Configurable, ABC):
 
         
         """
-        cls = config.get('classpath', None)
+        cls = config.get('classpath')
         assert cls, f'{config} doesn\'t contain classpath field'
         cls = str_to_type(cls)
         config = dict(config)
@@ -291,7 +284,7 @@ class FilterField(object):
         self.keys = keys
 
     def __call__(self, sample: dict):
-        sample = dict((k, sample[k]) for k in self.keys)
+        sample = {k: sample[k] for k in self.keys}
         return sample
 
 
@@ -370,7 +363,7 @@ class ToChar(object):
     def to_chars(self, word: str):
         chars = list(word)
         if self.min_word_length and len(chars) < self.min_word_length:
-            chars = chars + [self.pad] * (self.min_word_length - len(chars))
+            chars += [self.pad] * (self.min_word_length - len(chars))
         if self.max_word_length:
             chars = chars[:self.max_word_length]
         return chars
@@ -411,13 +404,7 @@ class NormalizeDigit(object):
 
     @staticmethod
     def transform(word: str):
-        new_word = ""
-        for char in word:
-            if char.isdigit():
-                new_word += '0'
-            else:
-                new_word += char
-        return new_word
+        return "".join('0' if char.isdigit() else char for char in word)
 
     def __call__(self, sample: dict) -> dict:
         src = sample[self.src]
@@ -466,9 +453,7 @@ class BMESOtoIOBES(object):
 
     @staticmethod
     def convert(y: str):
-        if y.startswith('M-'):
-            return 'I-'
-        return y
+        return 'I-' if y.startswith('M-') else y
 
 
 class NormalizeToken(ConfigurableNamedTransform):

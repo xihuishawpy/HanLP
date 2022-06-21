@@ -99,7 +99,7 @@ class UniversalDependenciesDecoder(torch.nn.Module):
                        "class_probabilities": class_probabilities}
         loss = 0
 
-        arc = batch.get('arc', None)
+        arc = batch.get('arc')
         # Run through each of the tasks on the shared encoder and save predictions
         for task in self.decoders:
             if self.scalar_mix:

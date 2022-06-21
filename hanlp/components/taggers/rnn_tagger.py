@@ -77,11 +77,16 @@ class RNNTagger(Tagger):
         logger.info(f"{timer.elapsed_human} elapsed, average time of each epoch is {timer.elapsed_average_human}")
 
     def build_scheduler(self, optimizer, anneal_factor, anneal_patience, **kwargs):
-        scheduler: ReduceLROnPlateau = ReduceLROnPlateau(optimizer,
-                                                         factor=anneal_factor,
-                                                         patience=anneal_patience,
-                                                         mode='max') if anneal_factor and anneal_patience else None
-        return scheduler
+        return (
+            ReduceLROnPlateau(
+                optimizer,
+                factor=anneal_factor,
+                patience=anneal_patience,
+                mode='max',
+            )
+            if anneal_factor and anneal_patience
+            else None
+        )
 
     def fit_dataloader(self, trn: DataLoader, criterion, optimizer, metric, logger: logging.Logger, ratio_width=None,
                        **kwargs):
@@ -120,8 +125,9 @@ class RNNTagger(Tagger):
             token_embed = token_embed.module(vocabs=vocabs)
         else:
             token_embed = build_word2vec_with_vocab(token_embed, vocabs[self.config.token_key])
-        model = RNNTaggingModel(token_embed, rnn_input, rnn_hidden, len(vocabs['tag']), drop, crf)
-        return model
+        return RNNTaggingModel(
+            token_embed, rnn_input, rnn_hidden, len(vocabs['tag']), drop, crf
+        )
 
     def _convert_embed(self):
         embed = self.config['embed']
@@ -137,8 +143,7 @@ class RNNTagger(Tagger):
             # Before building vocabs, let embeddings submit their vocabs, some embeddings will possibly opt out as their
             # transforms are not relevant to vocabs
             if isinstance(token_embed, Embedding):
-                transform = token_embed.transform(vocabs=vocabs)
-                if transform:
+                if transform := token_embed.transform(vocabs=vocabs):
                     dataset.transform.insert(-1, transform)
             self.build_vocabs(dataset, logger)
         if isinstance(token_embed, Embedding):
@@ -159,8 +164,6 @@ class RNNTagger(Tagger):
     def build_vocabs(self, dataset, logger):
         self.vocabs.tag = Vocab(unk_token=None, pad_token=None)
         self.vocabs[self.config.token_key] = Vocab()
-        for each in dataset:
-            pass
         self.vocabs.lock()
         self.vocabs.summary(logger)
 

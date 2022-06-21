@@ -63,14 +63,13 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
         return optimizer, scheduler
 
     def build_criterion(self, decoder=None, **kwargs):
-        if self.config.crf:
-            if not decoder:
-                decoder = self.model.decoder
-            if isinstance(decoder, torch.nn.DataParallel):
-                decoder = decoder.module
-            return decoder.crf
-        else:
+        if not self.config.crf:
             return nn.CrossEntropyLoss(reduction=self.config.loss_reduction)
+        if not decoder:
+            decoder = self.model.decoder
+        if isinstance(decoder, torch.nn.DataParallel):
+            decoder = decoder.module
+        return decoder.crf
 
     def build_metric(self, **kwargs):
         return F1()
@@ -214,13 +213,12 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
     def compute_mask(self, mask2d):
         mask3d = mask2d.unsqueeze_(-1).expand(-1, -1, mask2d.size(1))
         mask3d = mask3d & mask3d.transpose(1, 2)
-        if self.config.crf:
-            mask3d = mask3d.flatten(end_dim=1)
-            token_index = mask3d[:, 0]
-            mask3d = mask3d[token_index]
-            return token_index, mask3d
-        else:
+        if not self.config.crf:
             return mask3d
+        mask3d = mask3d.flatten(end_dim=1)
+        token_index = mask3d[:, 0]
+        mask3d = mask3d[token_index]
+        return token_index, mask3d
 
     def _step(self, optimizer, scheduler, grad_norm):
         clip_grad_norm(self.model, grad_norm)
@@ -230,8 +228,7 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
 
     # noinspection PyMethodOverriding
     def build_model(self, embed: Embedding, encoder, training, **kwargs) -> torch.nn.Module:
-        # noinspection PyCallByClass
-        model = SpanBIOSemanticRoleLabelingModel(
+        return SpanBIOSemanticRoleLabelingModel(
             embed.module(training=training, vocabs=self.vocabs),
             encoder,
             len(self.vocabs.srl),
@@ -239,7 +236,6 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
             self.config.mlp_dropout,
             self.config.crf,
         )
-        return model
 
     # noinspection PyMethodOverriding
     def build_dataloader(self, data, batch_size,
@@ -266,11 +262,12 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
         return PadSequenceDataLoader(dataset, batch_size, shuffle, device=device, batch_sampler=sampler)
 
     def build_dataset(self, data, transform):
-        dataset = CoNLL2012SRLBIODataset(data,
-                                         transform=transform,
-                                         doc_level_offset=self.config.get('doc_level_offset', True),
-                                         cache=isinstance(data, str))
-        return dataset
+        return CoNLL2012SRLBIODataset(
+            data,
+            transform=transform,
+            doc_level_offset=self.config.get('doc_level_offset', True),
+            cache=isinstance(data, str),
+        )
 
     def build_vocabs(self, dataset, logger, **kwargs):
         self.vocabs.srl = Vocab(pad_token=None, unk_token=None)
@@ -343,11 +340,15 @@ class SpanBIOSemanticRoleLabeler(TorchComponent):
         if self.config.crf:
             token_index, mask = mask
             criterion: CRF = criterion
-            loss = -criterion.forward(pred, srl.flatten(end_dim=1)[token_index], mask,
-                                      reduction=self.config.loss_reduction)
+            return -criterion.forward(
+                pred,
+                srl.flatten(end_dim=1)[token_index],
+                mask,
+                reduction=self.config.loss_reduction,
+            )
+
         else:
-            loss = criterion(pred[mask], srl[mask])
-        return loss
+            return criterion(pred[mask], srl[mask])
 
     # noinspection PyMethodOverriding
     @torch.no_grad()

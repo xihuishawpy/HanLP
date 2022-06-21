@@ -31,7 +31,9 @@ class RNNLanguageModel(KerasComponent):
             clipnorm=0.25,
             batch_size: int = 100, epochs=1000, run_eagerly=False, logger=None, verbose=True,
             **kwargs):
-        return super().fit(**dict((k, v) for k, v in locals().items() if k not in ('self', 'kwargs')))
+        return super().fit(
+            **{k: v for k, v in locals().items() if k not in ('self', 'kwargs')}
+        )
 
     def build_model(self, embedding, rnn_input_dropout, rnn_units, rnn_output_dropout, batch_size, seq_len, training,
                     **kwargs) -> tf.keras.Model:
@@ -72,7 +74,7 @@ class RNNLanguageModel(KerasComponent):
         forward = self.config['forward']
         # A slow implementation. Might better to let LSTM return states.
         # But anyway, this interface is for fun so let's take it easy
-        for step in range(num_steps):
+        for _ in range(num_steps):
             output = self.predict(text)
             first_or_last_token = output[-1]
             if forward:

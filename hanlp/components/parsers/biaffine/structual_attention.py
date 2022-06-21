@@ -123,8 +123,9 @@ class StructuralAttentionParser(BiaffineDependencyParser):
 
     def build_model(self, training=True, **kwargs) -> torch.nn.Module:
         transformer = TransformerEncoder.build_transformer(config=self.config, training=training)
-        model = StructuralAttentionModel(self.config, transformer, self.transformer_tokenizer)
-        return model
+        return StructuralAttentionModel(
+            self.config, transformer, self.transformer_tokenizer
+        )
 
     def fit(self, trn_data, dev_data, save_dir,
             transformer=None,
@@ -194,8 +195,7 @@ class StructuralAttentionParser(BiaffineDependencyParser):
             gold_input_ids = batch['gold_input_ids'] = gold_input_ids.gather(1, token_span[:, :, 0])
             input_ids_mask = batch['input_ids_mask'] = input_ids_mask.gather(1, token_span[:, :, 0])
             mlm_loss = F.cross_entropy(pred_input_ids[input_ids_mask], gold_input_ids[input_ids_mask])
-            loss = parse_loss + mlm_loss
-            return loss
+            return parse_loss + mlm_loss
         return parse_loss
 
     def build_tokenizer_transform(self):
@@ -227,8 +227,7 @@ class StructuralAttentionParser(BiaffineDependencyParser):
             super().update_metric(arc_scores, rel_scores, arcs, rels, mask, puncts, metric)
 
     def _report(self, loss, metric):
-        if isinstance(metric, tuple):
-            parse_metric, mlm_metric = metric
-            return super()._report(loss, parse_metric) + f' {mlm_metric}'
-        else:
+        if not isinstance(metric, tuple):
             return super()._report(loss, metric)
+        parse_metric, mlm_metric = metric
+        return f'{super()._report(loss, parse_metric)} {mlm_metric}'

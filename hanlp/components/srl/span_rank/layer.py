@@ -32,7 +32,7 @@ def orthonormal_initializer(output_size, input_size):
     tries = 0
     while not success and tries < 10:
         Q = np.random.randn(input_size, output_size) / np.sqrt(output_size)
-        for i in range(100):
+        for _ in range(100):
             QTQmI = Q.T.dot(Q) - I
             loss = np.sum(QTQmI ** 2 / 2)
             Q2 = Q ** 2
@@ -114,11 +114,11 @@ class NonLinear(nn.Module):
         self.linear = nn.Linear(in_features=input_size, out_features=hidden_size)
         if activation is None:
             self._activate = lambda x: x
-        else:
-            if not callable(activation):
-                raise ValueError("activation must be callable: type={}".format(type(activation)))
+        elif callable(activation):
             self._activate = activation
 
+        else:
+            raise ValueError(f"activation must be callable: type={type(activation)}")
         self.reset_parameters()
 
     def forward(self, x):
@@ -173,10 +173,19 @@ class Biaffine(nn.Module):
         return biaffine
 
     def __repr__(self):
-        return self.__class__.__name__ + ' (' \
-               + 'in1_features=' + str(self.in1_features) \
-               + ', in2_features=' + str(self.in2_features) \
-               + ', out_features=' + str(self.out_features) + ')'
+        return (
+            (
+                (
+                    (f'{self.__class__.__name__} (' + 'in1_features=')
+                    + str(self.in1_features)
+                    + ', in2_features='
+                )
+                + str(self.in2_features)
+                + ', out_features='
+            )
+            + str(self.out_features)
+            + ')'
+        )
 
 
 class HighwayLSTMCell(nn.Module):
@@ -274,10 +283,10 @@ class VariationalLSTM(nn.Module):
                 self.bcells.append(nn.LSTMCell(input_size=layer_input_size, hidden_size=hidden_size))
 
         self._all_weights = []
+        suffix = ''
         for layer in range(num_layers):
             layer_params = (self.fcells[layer].weight_ih, self.fcells[layer].weight_hh, \
                             self.fcells[layer].bias_ih, self.fcells[layer].bias_hh)
-            suffix = ''
             param_names = ['weight_ih_l{}{}', 'weight_hh_l{}{}']
             param_names += ['bias_ih_l{}{}', 'bias_hh_l{}{}']
             param_names = [x.format(layer, suffix) for x in param_names]
@@ -288,10 +297,9 @@ class VariationalLSTM(nn.Module):
             if self.bidirectional:
                 layer_params = (self.bcells[layer].weight_ih, self.bcells[layer].weight_hh, \
                                 self.bcells[layer].bias_ih, self.bcells[layer].bias_hh)
-                suffix = '_reverse'
                 param_names = ['weight_ih_l{}{}', 'weight_hh_l{}{}']
                 param_names += ['bias_ih_l{}{}', 'bias_hh_l{}{}']
-                param_names = [x.format(layer, suffix) for x in param_names]
+                param_names = [x.format(layer, '_reverse') for x in param_names]
                 for name, param in zip(param_names, layer_params):
                     setattr(self, name, param)
                 self._all_weights.append(param_names)

@@ -49,11 +49,9 @@ class BiaffineModelTF(tf.keras.Model):
             self.lstm_dropout = SharedDropout(p=config.lstm_dropout, name='lstm_dropout')
         else:
             self.transformer = transformer
-            transformer_dropout = config.get('transformer_dropout', None)
-            if transformer_dropout:
+            if transformer_dropout := config.get('transformer_dropout', None):
                 self.transformer_dropout = SharedDropout(p=config.transformer_dropout, name='transformer_dropout')
-            d_positional = config.get('d_positional', None)
-            if d_positional:
+            if d_positional := config.get('d_positional', None):
                 max_seq_length = config.get('max_seq_length', 256)
                 self.position_table = self.add_weight(shape=(max_seq_length, d_positional),
                                                       initializer='random_normal',

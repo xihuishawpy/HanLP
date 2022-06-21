@@ -202,10 +202,7 @@ class BiaffineSecondaryParser(BiaffineDependencyParser):
         for d, graph in zip(data, predictions):
             sent = CoNLLSentence()
             for idx, (cell, hrs) in enumerate(zip(d, graph)):
-                if use_pos:
-                    token, pos = cell
-                else:
-                    token, pos = cell, None
+                token, pos = cell if use_pos else (cell, None)
                 head = hrs[0][0]
                 deprel = rel_vocab[hrs[0][1]]
                 deps = [(h, rel_vocab[r]) for h, r in hrs[1:]]

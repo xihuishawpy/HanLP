@@ -64,6 +64,13 @@ class RNNNamedEntityRecognizer(RNNTagger):
 
     def save_config(self, save_dir, filename='config.json'):
         if self.config.token_delimiter is None:
-            self.config.token_delimiter = '' if all(
-                [len(x) == 1 for x in self.vocabs[self.config.token_key].idx_to_token[-100:]]) else ' '
+            self.config.token_delimiter = (
+                ''
+                if all(
+                    len(x) == 1
+                    for x in self.vocabs[self.config.token_key].idx_to_token[-100:]
+                )
+                else ' '
+            )
+
         super().save_config(save_dir, filename)

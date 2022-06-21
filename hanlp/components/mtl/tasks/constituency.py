@@ -158,12 +158,10 @@ class CRFConstituencyParsing(Task, CRFConstituencyParser):
         if pos:
             for tree, pos_per_sent in zip(doc[task_name], pos):
                 tree: Tree = tree
-                offset = 0
-                for subtree in tree.subtrees(lambda t: t.height() == 2):
+                for offset, subtree in enumerate(tree.subtrees(lambda t: t.height() == 2)):
                     tag = subtree.label()
                     if tag == '_':
                         subtree.set_label(pos_per_sent[offset])
-                    offset += 1
 
     def build_samples(self, inputs, cls_is_bos=False, sep_is_eos=False):
         return CRFConstituencyParser.build_samples(self, inputs)

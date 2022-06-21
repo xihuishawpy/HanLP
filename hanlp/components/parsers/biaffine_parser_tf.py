@@ -43,8 +43,7 @@ class BiaffineDependencyParserTF(KerasComponent):
                                                                 self.transform) if pretrained_embed else None
         if pretrained_embed:
             self.config.n_embed = pretrained.output_dim
-        model = BiaffineModelTF(self.config, pretrained)
-        return model
+        return BiaffineModelTF(self.config, pretrained)
 
     def _init_config(self):
         self.config.n_rels = len(self.transform.rel_vocab)
@@ -103,7 +102,7 @@ class BiaffineDependencyParserTF(KerasComponent):
         metric = self._build_metrics()
         for c in callbacks:
             if not hasattr(c, 'params'):
-                c.params = dict()
+                c.params = {}
             c.params['epochs'] = epochs
             c.params['trn_data'] = trn_data
             c.params['metrics'] = ['loss'] + self.config.metrics
@@ -123,7 +122,7 @@ class BiaffineDependencyParserTF(KerasComponent):
                                                                 optimizer, arc_loss, rel_loss)
                 self.run_metrics(arcs, rels, arc_scores, rel_scores, words, mask, metric)
                 logs['loss'] = loss
-                logs.update(metric.to_dict())
+                logs |= metric.to_dict()
                 if epoch == epochs - 1:
                     self.model.stop_training = True
                 for c in callbacks:
@@ -131,12 +130,12 @@ class BiaffineDependencyParserTF(KerasComponent):
             # evaluate on dev
             metric.reset_states()
             logs = {}
-            for idx, ((words, feats), (arcs, rels)) in enumerate(iter(dev_data)):
+            for (words, feats), (arcs, rels) in iter(dev_data):
                 arc_scores, rel_scores, loss, mask, arc_preds, rel_preds = self.evaluate_batch(words, feats, arcs, rels,
                                                                                                arc_loss, rel_loss,
                                                                                                metric)
                 logs['val_loss'] = loss
-                logs.update((f'val_{k}', v) for k, v in metric.to_dict().items())
+                logs |= ((f'val_{k}', v) for k, v in metric.to_dict().items())
 
             for c in callbacks:
                 c.on_epoch_end(epoch, logs)
@@ -162,11 +161,11 @@ class BiaffineDependencyParserTF(KerasComponent):
     def _build_metrics(self):
         if isinstance(self.config.metrics, tuple):
             self.config.metrics = list(self.config.metrics)
-        if self.config.metrics == ['UAS', 'LAS']:
-            metric = LabeledScore()
-        else:
-            metric = LabeledF1TF()
-        return metric
+        return (
+            LabeledScore()
+            if self.config.metrics == ['UAS', 'LAS']
+            else LabeledF1TF()
+        )
 
     def run_metrics(self, arcs, rels, arc_scores, rel_scores, words, mask, metric):
         arc_preds, rel_preds = self.decode(arc_scores, rel_scores, mask)
@@ -190,9 +189,7 @@ class BiaffineDependencyParserTF(KerasComponent):
         rel_scores = tf.gather_nd(rel_scores, tf.stack([tf.range(len(arcs), dtype=tf.int64), arcs], axis=1))
         arc_loss = arc_loss(arcs, arc_scores)
         rel_loss = rel_loss(rels, rel_scores)
-        loss = arc_loss + rel_loss
-
-        return loss
+        return arc_loss + rel_loss
 
     def build_optimizer(self, optimizer='adam', lr=2e-3, mu=.9, nu=.9, epsilon=1e-12, clip=5.0, decay=.75,
                         decay_steps=5000, **kwargs):
@@ -320,7 +317,7 @@ class BiaffineDependencyParserTF(KerasComponent):
                     output.write(str(sent))
                     output.write('\n\n')
             logs['loss'] = loss
-            logs.update(metric.to_dict())
+            logs |= metric.to_dict()
             for c in callbacks:
                 c.on_test_batch_end(idx, logs)
         for c in callbacks:
@@ -339,9 +336,13 @@ class BiaffineDependencyParserTF(KerasComponent):
         mask = tf.not_equal(words, self.config.pad_index) & tf.not_equal(words, self.config.bos_index)
         arc_scores, rel_scores = self.model((words, feats))
         arc_preds, rel_preds = self.decode(arc_scores, rel_scores, mask)
-        for sent in self.transform.XY_to_inputs_outputs((words, feats, mask), (arc_preds, rel_preds), gold=False,
-                                                        inputs=inputs, conll=conll):
-            yield sent
+        yield from self.transform.XY_to_inputs_outputs(
+            (words, feats, mask),
+            (arc_preds, rel_preds),
+            gold=False,
+            inputs=inputs,
+            conll=conll,
+        )
 
     def compile_model(self, optimizer, loss, metrics):
         super().compile_model(optimizer, loss, metrics)
@@ -375,9 +376,7 @@ class BiaffineSemanticDependencyParserTF(BiaffineDependencyParserTF):
         rel_scores, rels = rel_scores[arcs], rels[arcs]
         arc_loss = arc_loss(arcs, arc_scores)
         rel_loss = rel_loss(rels, rel_scores)
-        loss = arc_loss + rel_loss
-
-        return loss
+        return arc_loss + rel_loss
 
     def decode(self, arc_scores, rel_scores, mask):
         arc_preds = arc_scores > 0
@@ -395,8 +394,7 @@ class BiaffineTransformerDependencyParserTF(BiaffineDependencyParserTF, tf.keras
 
     def build_model(self, transformer, training, **kwargs) -> tf.keras.Model:
         transformer = self.build_transformer(training, transformer)
-        model = BiaffineModelTF(self.config, transformer=transformer)
-        return model
+        return BiaffineModelTF(self.config, transformer=transformer)
 
     def build_transformer(self, training, transformer):
         if training:
@@ -469,25 +467,24 @@ class BiaffineTransformerDependencyParserTF(BiaffineDependencyParserTF, tf.keras
     # noinspection PyMethodOverriding
     def build_optimizer(self, optimizer, learning_rate, epsilon, weight_decay_rate, clipnorm, fp16, train_steps,
                         **kwargs):
-        if optimizer == 'adamw':
-            epochs = self.config['epochs']
-            learning_rate_transformer = kwargs.get('learning_rate_transformer', None)
-            train_steps = math.ceil(self.config.train_examples * epochs / self.config.samples_per_batch)
-            warmup_steps = math.ceil(train_steps * self.config['warmup_steps_ratio'])
-            if learning_rate_transformer is not None:
-                if learning_rate_transformer > 0:
-                    self.params['optimizer_transformer'] = build_adamw_optimizer(self.config, learning_rate_transformer,
-                                                                                 epsilon,
-                                                                                 clipnorm, train_steps, fp16,
-                                                                                 math.ceil(warmup_steps),
-                                                                                 weight_decay_rate)
-                else:
-                    self.model.transformer.trainable = False
-                return super().build_optimizer(lr=learning_rate)  # use a normal adam for biaffine
-            else:
-                return build_adamw_optimizer(self.config, learning_rate, epsilon, clipnorm, train_steps, fp16,
-                                             math.ceil(warmup_steps), weight_decay_rate)
-        return super().build_optimizer(optimizer, **kwargs)
+        if optimizer != 'adamw':
+            return super().build_optimizer(optimizer, **kwargs)
+        epochs = self.config['epochs']
+        learning_rate_transformer = kwargs.get('learning_rate_transformer', None)
+        train_steps = math.ceil(self.config.train_examples * epochs / self.config.samples_per_batch)
+        warmup_steps = math.ceil(train_steps * self.config['warmup_steps_ratio'])
+        if learning_rate_transformer is None:
+            return build_adamw_optimizer(self.config, learning_rate, epsilon, clipnorm, train_steps, fp16,
+                                         math.ceil(warmup_steps), weight_decay_rate)
+        if learning_rate_transformer > 0:
+            self.params['optimizer_transformer'] = build_adamw_optimizer(self.config, learning_rate_transformer,
+                                                                         epsilon,
+                                                                         clipnorm, train_steps, fp16,
+                                                                         math.ceil(warmup_steps),
+                                                                         weight_decay_rate)
+        else:
+            self.model.transformer.trainable = False
+        return super().build_optimizer(lr=learning_rate)  # use a normal adam for biaffine
 
     def build_vocab(self, trn_data, logger):
         self.config.train_examples = train_examples = super().build_vocab(trn_data, logger)
@@ -521,8 +518,7 @@ class BiaffineTransformerDependencyParserTF(BiaffineDependencyParserTF, tf.keras
         return loss, arc_scores, rel_scores
 
     def _apply_grads(self, accum_grads):
-        optimizer_transformer = self.params.get('optimizer_transformer', None)
-        if optimizer_transformer:
+        if optimizer_transformer := self.params.get('optimizer_transformer', None):
             transformer = self.params['transformer_variable_names']
             trainable_variables = self.model.trainable_variables
             optimizer_transformer.apply_gradients(

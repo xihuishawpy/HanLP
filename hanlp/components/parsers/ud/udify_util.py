@@ -44,7 +44,7 @@ def get_ud_treebank_files(dataset_dir: str, treebanks: List[str] = None) -> Dict
     
     """
     datasets = {}
-    treebanks = os.listdir(dataset_dir) if not treebanks else treebanks
+    treebanks = treebanks or os.listdir(dataset_dir)
     for treebank in treebanks:
         treebank_path = os.path.join(dataset_dir, treebank)
         conllu_files = [file for file in sorted(os.listdir(treebank_path)) if file.endswith(".conllu")]
@@ -224,10 +224,9 @@ def sequence_cross_entropy_with_logits(
                 alpha_factor = torch.cat([1 - alpha_factor, alpha_factor])
         else:
             raise TypeError(
-                ("alpha must be float, list of float, or torch.FloatTensor, {} provided.").format(
-                    type(alpha)
-                )
+                f"alpha must be float, list of float, or torch.FloatTensor, {type(alpha)} provided."
             )
+
         # shape : (batch, max_len)
         alpha_factor = torch.gather(alpha_factor, dim=0, index=targets_flat.view(-1)).view(
             *targets.size()
@@ -290,12 +289,12 @@ def tiny_value_of_dtype(dtype: torch.dtype):
     """
     if not dtype.is_floating_point:
         raise TypeError("Only supports floating point dtypes.")
-    if dtype == torch.float or dtype == torch.double:
+    if dtype in [torch.float, torch.double]:
         return 1e-13
     elif dtype == torch.half:
         return 1e-4
     else:
-        raise TypeError("Does not support dtype " + str(dtype))
+        raise TypeError(f"Does not support dtype {str(dtype)}")
 
 
 def combine_initial_dims_to_1d_or_2d(tensor: torch.Tensor) -> torch.Tensor:
@@ -309,10 +308,7 @@ def combine_initial_dims_to_1d_or_2d(tensor: torch.Tensor) -> torch.Tensor:
       If original tensor is 1-d or 2-d, return it as is.
 
     """
-    if tensor.dim() <= 2:
-        return tensor
-    else:
-        return tensor.view(-1, tensor.size(-1))
+    return tensor if tensor.dim() <= 2 else tensor.view(-1, tensor.size(-1))
 
 
 def uncombine_initial_dims(tensor: torch.Tensor, original_size: torch.Size) -> torch.Tensor:
@@ -332,9 +328,8 @@ def uncombine_initial_dims(tensor: torch.Tensor, original_size: torch.Size) -> t
     """
     if len(original_size) <= 2:
         return tensor
-    else:
-        view_args = list(original_size) + [tensor.size(-1)]
-        return tensor.view(*view_args)
+    view_args = list(original_size) + [tensor.size(-1)]
+    return tensor.view(*view_args)
 
 
 def get_range_vector(size: int, device: int) -> torch.Tensor:
@@ -363,7 +358,4 @@ def get_device_of(tensor: torch.Tensor) -> int:
     Returns:
 
     """
-    if not tensor.is_cuda:
-        return -1
-    else:
-        return tensor.get_device()
+    return tensor.get_device() if tensor.is_cuda else -1

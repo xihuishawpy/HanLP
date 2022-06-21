@@ -34,7 +34,7 @@ def unpack_deps_to_head_deprel(sample: dict, pad_rel=None, arc_key='arc', rel_ke
         if not pad_rel:
             pad_rel = PAD
         for i in range(len(rel)):
-            rel[i] = [r if r else pad_rel for r in rel[i]]
+            rel[i] = [r or pad_rel for r in rel[i]]
     return sample
 
 
